@@ -1,6 +1,8 @@
 # 인사이트 노트 — Budget-Constrained Sequential Information-Seeking
 
 > Qwen2.5-VL-7B-Instruct를 ScienceQA 500개 샘플에서 budget sweep(b=0…10) + 베이스라인 정책 4종으로 평가한 결과. 자세한 데모는 [`experiment.ipynb`](./experiment.ipynb), 원시 데이터는 [`output/`](./output) 참고.
+>
+> **Figure 노트**: 헤드라인 figure 5장은 `docs/` 아래에 tracked로 복사되어 있고 본문이 이를 링크함. 그 외 보조 plot 참조는 `output/plots/` 아래의 gitignored 경로 — `analyze_calibration.py` / `analyze_difficulty.py` / `analyze_abstention.py` 재실행 시 로컬에서 재생성됨.
 
 ## 용어: Sweep
 
@@ -187,6 +189,231 @@ dense sweep (b=0,1,2,3,4,5,6,7,8,10):
 
 ---
 
+## ⑤ Early-stop 신호는 b≤3에서만 calibrated — b≥4부터는 무용
+
+**Phase 1a Metric A** ([`output/calibration/summary.csv`](./output/calibration/summary.csv), 그림: [`docs/calibration_A_spontaneous_vs_forced_acc.png`](./docs/calibration_A_spontaneous_vs_forced_acc.png))
+
+같은 budget run에서 자발 ANSWER로 종료한 샘플 vs FORCED_ANSWER로 종료한 샘플의 정답률 차이.
+
+| budget | spontaneous_n | spontaneous_acc | forced_n | forced_acc | gap |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 7 | 0.714 | 465 | 0.658 | +0.06 |
+| 2 | 42 | **0.738** | 458 | 0.638 | **+0.10** |
+| 3 | 139 | **0.763** | 361 | 0.573 | **+0.19** |
+| 4 | 229 | 0.638 | 271 | 0.638 | 0 |
+| 5 | 284 | 0.659 | 216 | 0.648 | +0.01 |
+| 6 | 342 | 0.655 | 158 | 0.658 | 0 |
+| 7 | 372 | 0.659 | 128 | 0.688 | −0.03 |
+| 8 | 403 | 0.658 | 97 | 0.711 | −0.05 |
+| 10 | 432 | 0.641 | 68 | **0.824** | **−0.18** |
+
+작은 budget(b=2~3)에서는 모델이 자발적으로 멈춘 샘플이 강제로 끊긴 샘플보다 +10~+19pp 더 정확하다 — **"나 답할 수 있어"라는 신호가 진짜 calibrated**. 그런데 b=4부터 격차가 사라지고, b=10에서는 오히려 **forced가 +18pp 더 정확**: budget이 클 때 자발 stop은 그냥 버릇이 되고, 끝까지 못 멈춘 68개가 진짜 어려운 케이스라서 추가 정보로 정답률이 더 오름.
+
+→ 모델은 **작은 budget에서만 stopping rule이 작동하고, budget이 풍부해지면 그 신호를 잃어버림**. 학습된 budget-conditional stopping policy의 필요성에 대한 직접 증거.
+
+---
+
+## ⑥ Cross-budget 답 안정성 = 무료 confidence proxy
+
+**Phase 1a Metric B** ([`per_sample_stability.csv`](./output/calibration/per_sample_stability.csv), 그림: [`B_choice_stability.png`](./output/plots/calibration/B_choice_stability.png))
+
+같은 sample을 budget 10 point(b=0,1,2,3,4,5,6,7,8,10)에서 풀었을 때 final_choice가 얼마나 일관적인가:
+
+- 평균 modal-choice fraction = **0.918**
+- 10개 run에서 정확히 같은 답을 낸 샘플 = **69.4%**
+- modal choice 정답률 = 0.658 (전체 평균과 일치)
+
+stability bin × modal 정답률:
+
+| stability bucket | n | modal 정답률 |
+|---|---:|---:|
+| ≤0.5 (답이 자주 흔들림) | 16 | 0.625 |
+| 0.5–0.7 | 59 | **0.356** ← random보다 약간 위 |
+| 0.7–0.85 | 35 | 0.486 |
+| 0.85–1.0 (안정) | 390 | **0.721** |
+
+→ **budget 한 차원만 흔들어도 답이 흔들리는 샘플은 모델이 실제로 모르는 샘플.** stability가 logit/entropy 없이도 얻을 수 있는 강한 confidence proxy. 학습 시 abstention target 라벨링이나, inference 시 self-consistency-style 게이트 모두에 재활용 가능.
+
+---
+
+## ⑦ Stop-step 별 정답률 — info=2에서 peak, info=3부터 −20pp 급락
+
+**Phase 1a Metric C** ([`stop_step_acc.csv`](./output/calibration/stop_step_acc.csv), 그림: [`C_stop_step_accuracy.png`](./output/plots/calibration/C_stop_step_accuracy.png))
+
+모든 자발 ANSWER trajectory를 (run에 무관하게) stop step별로 묶어서 정답률:
+
+| info_requests | n | accuracy |
+|---:|---:|---:|
+| 0 (즉답) | 128 | 0.711 |
+| 1 | 278 | 0.745 |
+| **2** | **384** | **0.794** ← peak |
+| 3 | 411 | **0.596** ← **−20pp** |
+| 4 | 383 | 0.637 |
+| 5 | 370 | 0.600 |
+| 6 | 176 | 0.597 |
+| 7 | 84 | 0.524 |
+
+**적게 묻고 멈춘 trajectory가 더 정확하다.** 매크로 budget curve의 b=3 dip(④)이 per-trajectory 수준에서도 재현됨 — "더 묻기 시작하는 순간"이 곧 confidence drop 시그널.
+
+Caveat: selection bias 있음 (info=k에서 stop하는 샘플들이 어떤 budget run에서 왔는지에 따라 평균이 달라짐). 그래도 0.794→0.596 급락은 noise 아님 (n 모두 380+).
+
+---
+
+## ⑧ 모델은 "이미 안다"를 인지하지 못한다 — easy/hard 샘플이 거의 같은 양 정보 요구
+
+**Phase 1a Metric F** ([`zero_info_cohort.csv`](./output/calibration/zero_info_cohort.csv), 그림: [`docs/calibration_F_zero_info_cohort.png`](./docs/calibration_F_zero_info_cohort.png))
+
+zero_info(정보 없이 답)에서 **정답이었던 샘플 281개(zi_correct)** vs **오답이었던 샘플 219개(zi_wrong)** 두 코호트로 나눠서 비교:
+
+| budget | cohort | spon_stop 비율 | 평균 info 요청 | accuracy |
+|---:|---|---:|---:|---:|
+| 6 | zi_correct | 0.665 | **4.06** | 0.904 |
+| 6 | zi_wrong | 0.708 | **4.33** | 0.338 |
+| 10 | zi_correct | 0.826 | 5.06 | 0.907 |
+| 10 | zi_wrong | 0.913 | 5.16 | 0.356 |
+
+핵심:
+1. **모델은 두 코호트에 거의 같은 양의 정보를 요청한다** (b=6에서 차이 0.27건). 사전지식만으로 풀 수 있는 샘플과 정말 정보가 필요한 샘플을 **구분 못 함**.
+2. **추가 정보가 쉬운 샘플을 오히려 망친다**: zi_correct accuracy는 b=1에서 **0.954** → b=6에서 **0.904** (**−5pp**). 정보를 더 줄수록 멀쩡한 답을 깨뜨림.
+3. zi_wrong은 0.196→0.356 (+16pp). 정보가 어려운 샘플은 일부 구해주지만 동시에 쉬운 샘플을 망가뜨리는 **비대칭 효과**가 매크로 곡선이 0.700에 cap되는 한 이유.
+
+이게 Phase 1a 최강 발견. budget-conditional policy가 *왜* 필요한지 한 그림으로 설명: 동일 budget에서도 sample-level routing(쉬운 건 stop, 어려운 건 spend)이 안 되어 있다는 정량 증거.
+
+---
+
+## ⑨ Forced→Spontaneous 답 일치율 84% — 추가 정보가 모델 답을 거의 안 바꾼다
+
+**Phase 1a Metric D** ([`forced_vs_spon.csv`](./output/calibration/forced_vs_spon.csv))
+
+같은 sample이 작은 budget에서 FORCED_ANSWER로 끝났고 큰 budget에서는 자발 ANSWER로 끝난 1,981 페어:
+
+- 두 답 일치율 **0.843**
+- forced 정답률 0.617 / spontaneous 정답률 0.648 (+3pp만)
+- forced budget이 커질수록 일치율도 ↑ (b_forced=0 → 0.79, b_forced=6 → 0.94, b_forced=8 → 1.00)
+
+해석:
+- **추가 정보가 모델 답을 크게 바꾸지 않음**. 정보 통합 능력 약함의 또 다른 신호.
+- 동시에 **force-answer 자체는 budget curve의 bottleneck 아님** — 만약 강제로 끊는 게 답을 매번 망가뜨린다면 작은 b accuracy가 더 나빠야 했을 텐데, 실제로는 거의 같은 답을 내고 있음. ④의 dip은 force-answer 부작용이 아니라 **모델 정책의 진짜 path-dependence** 때문.
+
+---
+
+## ⑩ Modality bias는 zi_wrong 코호트에서만 손해 — zi_correct에서는 modality 무관
+
+**Phase 1b** ([`output/difficulty/cohort_curve.csv`](./output/difficulty/cohort_curve.csv), 그림: [`docs/difficulty_A_cohort_accuracy_curve.png`](./docs/difficulty_A_cohort_accuracy_curve.png))
+
+b=6 reference policy를 코호트별로 분해:
+
+| 정책 (b=6) | zi_correct (n=281) | zi_wrong (n=219) | gap |
+|---|---:|---:|---:|
+| `always_text` | **0.911** | 0.288 | — |
+| `always_visual` | **0.911** | 0.384 | **+9.6pp** |
+| `full_info` | 0.890 | 0.457 | **+16.9pp** |
+| `main_b6` (model) | 0.904 | 0.338 | — |
+
+핵심 두 가지:
+1. **zi_correct에서는 always_text == always_visual == 0.911로 정확히 동일.** 쉬운 샘플은 어떤 modality를 줘도 같은 답이 나옴 → modality 선택 자체가 무의미.
+2. **zi_wrong에서만 always_visual이 always_text보다 +9.6pp 더 좋다.** ①에서 발견한 "모델 텍스트 편향이 손해"는 사실상 **zi_wrong 코호트에서만 발생하는 현상**. 모델은 두 코호트에 대해 거의 같은 modality 비율(text 3.45/3.07, visual 0.58/1.24)을 적용 — **modality 선택이 실제로 중요한 코호트에서만 그것이 잘못된 default**라는 뼈저린 미스.
+
+→ 단순히 "visual을 더 써라" nudge가 사회과학에서 망가지는 이유(③)도 이걸로 설명: 사회과학은 zi_wrong이 ~60%인데(아래 ⑫) zi_wrong이 visual로 도움받는 정도는 작음 + zi_correct는 modality 무관 + nudge가 forced visual로 zi_correct에서 wasted를 늘림 → 양쪽에서 손해.
+
+---
+
+## ⑪ Budget이 쉬운 샘플을 망치고 어려운 샘플을 살리는 비대칭 (clean cross-over at b=1)
+
+**Phase 1b** (그림: [`docs/difficulty_D_delta_from_b1.png`](./docs/difficulty_D_delta_from_b1.png))
+
+b=1 정확도를 baseline으로 놓고 budget 늘릴 때 코호트별 정답률 변화:
+
+| budget | zi_correct Δ | zi_wrong Δ |
+|---:|---:|---:|
+| 1 | 0.000 (baseline 0.954) | 0.000 (baseline 0.196) |
+| 2 | −0.011 | +0.068 |
+| 3 | **−0.050** | +0.073 |
+| 4 | −0.053 | +0.105 |
+| 5 | −0.053 | +0.142 |
+| 6 | −0.050 | +0.142 |
+| 7 | −0.046 | +0.160 |
+| 10 | −0.046 | +0.160 |
+
+- zi_correct는 b=3 이후 −5pp plateau에 갇힘. 추가 정보가 멀쩡한 답을 깨뜨림.
+- zi_wrong은 b=7까지 +16pp 단조 증가 후 포화.
+- 두 곡선이 정확히 b=1에서 교차 → **샘플 1개당 1 unit의 정보가 모든 sample에 정확히 한 번씩 도움이 되는 sweet spot**, 그 이상은 코호트 따라 ROI가 양분.
+
+이게 ④에서 본 budget curve 비단조성의 메커니즘적 설명. 매크로 곡선은 두 코호트 곡선의 가중 평균이고, zi_correct의 −5pp가 zi_wrong의 +x pp를 갉아먹어서 b=3 dip이 만들어짐. **budget-conditional policy의 핵심 동기**: 같은 평균 budget을 줘도 sample 단위로 routing(easy → 빨리 답, hard → 끝까지 정보)을 해야 매크로 0.700 ceiling을 넘는다.
+
+---
+
+## ⑫ Subject 경제학: natural science는 high-volatility, social science는 low-volatility
+
+**Phase 1b** ([`subject_cohort_sizes.csv`](./output/difficulty/subject_cohort_sizes.csv), [`subject_cohort_accuracy.csv`](./output/difficulty/subject_cohort_accuracy.csv), 그림: [`C_subject_cohort.png`](./output/plots/difficulty/C_subject_cohort.png))
+
+| subject | total n | zi_correct | zi_wrong | zi_correct frac |
+|---|---:|---:|---:|---:|
+| language science | 14 | 10 | 4 | 0.714 |
+| natural science | 410 | 240 | 170 | 0.585 |
+| social science | 76 | 31 | 45 | 0.408 |
+
+코호트 × subject × budget 정확도 table에서 가장 흥미로운 두 셀:
+
+- **natural science zi_correct**: b=1 0.950 → b=6 0.908 (−4pp). zi_wrong: 0.182 → 0.359 (+18pp). cost-benefit이 가장 큼.
+- **social science zi_correct**: b=1 0.968 → b=6 0.968 (변화 없음). zi_wrong: 0.222 → 0.333 (+11pp), b=10에서 0.267로 하락. **사회과학은 budget을 더 줘도 hard 코호트가 별로 안 살아남.**
+
+즉:
+- **natural science**: 추가 정보가 양쪽 코호트에 강한 영향. budget choice가 가장 중요한 도메인.
+- **social science**: zi_correct는 견고, zi_wrong는 불응. budget 늘려봤자 효용 적음 — 차라리 zero_info에 가까운 정책이 효율적.
+- **language science**: n=14로 통계적으로 무의미.
+
+→ 도메인별 optimal budget이 다르다는 정량 단서. ③에서 본 nudge의 사회과학 −5.3pp 악화도 이걸로 설명: 사회과학은 추가 정보 자체의 marginal utility가 낮은데 거기에 modality까지 강제로 visual로 돌리면 wasted만 늘어남.
+
+---
+
+## ⑬ 모델은 ABSTAIN을 쓸 수 있지만, "답할지 말지" 판단은 zero_info 사전지식 신호와 거의 겹친다
+
+**Phase 1c Metric A + D** ([`output/abstention/summary.csv`](./output/abstention/summary.csv), [`aligned_comparison.csv`](./output/abstention/aligned_comparison.csv))
+
+4-action 버전(ANSWER / ABSTAIN / REQUEST_TEXT / REQUEST_VISUAL)을 system prompt에 노출하고 두 budget에서 측정:
+
+| run | coverage (답변 비율) | selective acc (답한 것만) | 비고 |
+|---|---:|---:|---|
+| `abstain_b0` (b=0) | 12.0% (60/500) | **0.833** | 88%를 abstain — 모델은 starvation에서 "모른다" 잘 인지 |
+| `abstain_b6` (b=6) | 90.0% (450/500) | 0.644 | 10%만 abstain |
+
+순진한 해석은 "0.833은 zero_info의 0.562보다 훨씬 높으니 모델이 confidence signal을 잘 쓴다"지만, 이건 **selection confound**. 공정한 테스트는 "abstain_b0이 답하기로 선택한 **바로 그 60개**에서 zero_info는 얼마나 맞히나?":
+
+| 비교 | own acc | 같은 subset에서 reference acc | uplift |
+|---|---:|---:|---:|
+| `abstain_b0` vs `zero_info` (60개 subset) | 0.833 | **0.800** | **+3.3pp** |
+| `abstain_b6` vs `main_b6` (450개 subset) | 0.644 | 0.651 | **−0.7pp** |
+
+→ **"답할지 말지" 결정은 사실상 zero_info가 이미 가지고 있던 사전지식 경계와 같은 신호**. 새로 얻은 selectivity는 b=0에서 +3.3pp, b=6에서 0pp. Abstention이 모델에 *새로운* confidence 축을 더해주지는 않음. 단지 zero_info가 이미 틀리게 답했을 샘플을 "답 안 함"으로 바꿔주는 것.
+
+---
+
+## ⑭ Vanilla abstention은 b=6에서 오히려 anti-calibrated
+
+**Phase 1c Metric B** ([`output/abstention/cohort_xtab.csv`](./output/abstention/cohort_xtab.csv), 그림: [`docs/abstention_B_cohort_abstain.png`](./docs/abstention_B_cohort_abstain.png))
+
+zi_correct/zi_wrong 코호트별 abstain rate:
+
+| budget | cohort | abstain rate | n |
+|---:|---|---:|---:|
+| 0 | zi_correct | 0.829 | 281 |
+| 0 | zi_wrong | **0.945** | 219 |
+| 6 | zi_correct | **0.121** | 281 |
+| 6 | zi_wrong | 0.073 | 219 |
+
+**b=0에서는 약하게 calibrated** (zi_wrong abstain 94.5% > zi_correct 82.9%) — 모델이 정보 없을 때는 "더 모르는 쪽을 더 자주 포기"하는 직관을 따름.
+
+**b=6에서는 방향 뒤집힘 — anti-calibration**: 모델은 zi_correct에서 **더 자주 abstain**(12.1%)하고 zi_wrong에서 **덜 abstain**(7.3%). Budget이 있으면 어려운 샘플도 그냥 답해버리고, 오히려 쉬운 샘플에서 가끔 겁먹고 abstain. 결과:
+
+- abstain_b6 selective acc (0.644) < main_b6 overall (0.656)
+- Effective Reliability Φ curve는 모든 wrong-answer cost c ∈ [0, 2]에서 abstain_b6 < main_b6 ([`phi_curve.csv`](./output/abstention/phi_curve.csv)). 즉 **b=6에서 vanilla abstention을 쓰는 건 어떤 cost regime에서도 손해**.
+- 반면 abstain_b0 Φ는 c ≥ 1.25에서 zero_info를 역전함 (wrong-answer cost 높을 때 abstention이 값어치 가짐).
+
+→ **단순 prompt 노출만으로는 모델이 abstention을 "지금 나 모르니까 안 답한다"로 쓰지 않고, budget이 있으면 "필요 없는 장치"로 취급하거나 잘못 배치함**. 이게 `research_plan.md` Thread D (R-Tuning / MM-UPD) 방식의 **training-for-abstention이 왜 필수**인지에 대한 직접 증거 — Phase 4 GRPO reward에 abstention 항(`λ_cal` 올바른 abstain, `λ_abs` 잘못된 abstain)을 넣는 디자인 근거.
+
+---
+
 ## 한계와 caveats
 
 - **단일 모델**: Qwen2.5-VL-7B만 평가. 모달리티 편향이 모델 fine-tuning 패턴에 종속될 가능성 — LLaVA/InternVL은 다를 수 있음.
@@ -196,18 +423,18 @@ dense sweep (b=0,1,2,3,4,5,6,7,8,10):
 - **Subject 분포 편향**: 410/500이 natural science. social(76)/language(14)는 표본 적어 결론 약함.
 - **단일 nudge prompt**: 다른 표현/위치/길이로 시도하면 결과 다를 수 있음. 본 실험은 한 가지 nudge만 측정.
 - **Tile reveal order**: shuffled (seeded). 항상 같은 순서로 공개되면 모델이 "처음 본 타일이 항상 같은 위치" 같은 휴리스틱으로 갈 수 있어 random shuffle을 default로 사용. row-major 비교는 미실험.
+- **Phase 1c sufficiency set은 skip**: 원래 ROADMAP은 MM-UPD subset 또는 ScienceQA image-masked 변형을 쓰는 sufficiency-known mini-set을 명시했지만 이 phase에서는 zi_correct/zi_wrong cohort를 proxy로 사용. ⑬–⑭는 **자연스럽게 존재하는 ScienceQA 샘플**에서의 모델 abstention 행동 진단이지, unanswerable-by-construction stimuli에 대한 직접 테스트는 아님. 후자는 Phase 1d 또는 Phase 2 follow-up으로 이월 (ROADMAP 참조).
 
 ---
 
 ## 다음 단계 후보
 
-1. **Subject conditional routing**: 질문 텍스트의 키워드(예: "map", "diagram", "passage")로 visual/text 우선순위 결정. nudge보다 정밀.
-2. **Few-shot ICL**: 질문 유형별 modality 결정 예시를 1-3개 넣고 그 효과 측정.
-3. **다른 VLM 비교**: LLaVA-1.6, InternVL2, Pixtral 등에 동일 프로토콜 적용. 텍스트 편향이 모델 의존인지 task 의존인지 분리.
-4. **Tile order 효과**: `row_major` vs `shuffled` 비교 — 모델이 spatial 위치 정보를 활용하는지.
-5. **Budget 단위 비대칭화**: visual cost를 0.5로, text cost를 1로 설정해서 모델이 "비싼" 모달리티를 쓰는지 본다.
-6. **모델 calibration**: trace에서 force-answer 직전과 자발 ANSWER 시점의 답이 얼마나 다른지 → 모델이 자신의 confidence를 얼마나 잘 추정하는지 정량화.
-7. **샘플 difficulty stratification**: zero_info에서 틀린 샘플 vs 맞은 샘플로 나눠 budget 활용 패턴 비교.
+다음 단계는 [`ROADMAP.md`](./ROADMAP.md)에 phase별로 정리되어 있음. Phase 1a (calibration ⑤–⑨) 완료. 다음 우선순위:
+
+- **Phase 1b** Difficulty stratification: zero_info 코호트로 budget curve 다시 그리기 (어떤 budget이 어떤 코호트에 효과적인지 분리)
+- **Phase 1c** Abstention proxy: vanilla 모델이 ABSTAIN action을 얼마나 쓰는지 + sufficiency-known 작은 set 만들기
+- **Phase 2** 6-action vocab 확장 (`ABSTAIN`/`THINK`/`ZOOM(bbox)`/`REQUEST_HI_RES`) + 새 벤치마크 1종 (V*Bench or HR-Bench)
+- **Phase 3+** SFT 데이터 → GRPO budget-conditional training (논문 본 컨트리뷰션)
 
 ---
 
@@ -220,3 +447,11 @@ dense sweep (b=0,1,2,3,4,5,6,7,8,10):
 - `output/plots/accuracy_vs_budget.png`, `output/plots/modality_mix.png` — plot 원본
 - `output/<run>/predictions.{parquet,csv,jsonl}` — run별 sample-level raw (jsonl은 step trace 포함)
 - `output/<run>/summary_{overall,by_subject}.{csv,jsonl}` — run별 집계
+- `output/calibration/` — Phase 1a 산출물 (summary.csv / per_sample_*.csv / stop_step_acc.csv / forced_vs_spon.csv / zero_info_cohort.csv)
+- `output/plots/calibration/A..F_*.png` — calibration 시각화
+- `output/difficulty/` — Phase 1b 산출물 (cohort_curve.csv / cohort_modality.csv / subject_cohort_*.csv / peak_budget.csv)
+- `output/plots/difficulty/{A,B,C,D}_*.png` — difficulty 시각화
+- `output/abstain_b0/`, `output/abstain_b6/` — Phase 1c raw prediction (run_abstention.py 결과)
+- `output/abstention/` — Phase 1c 분석 산출물 (summary / cohort_xtab / phi_curve / aligned_comparison)
+- `output/plots/abstention/{A,B,C}_*.png` — abstention 시각화
+- `docs/*.png` — INSIGHTS 헤드라인 figure 5장 (복사본, 아래 "figure" 절 참조)
