@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-The parent workspace `CLAUDE.md` at `/mnt/ddn/prod-runs/thyun.park/src/CLAUDE.md` covers workspace-level conventions (uv, per-project venvs, git-ignored artifact dirs). This file is specific to `eval_sufficiency/`.
+The parent workspace `CLAUDE.md` at `/mnt/ddn/prod-runs/thyun.park/src/CLAUDE.md` covers workspace-level conventions (uv, per-project venvs, git-ignored artifact dirs). This file is specific to `vlm_budget_eval/`.
 
 ## What this project does
 
@@ -34,7 +34,7 @@ Text hints are sentences split from `hint + lecture`, revealed in natural order 
 ## Running
 
 ```bash
-cd /mnt/ddn/prod-runs/thyun.park/src/eval_sufficiency
+cd /mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval
 uv sync
 
 # 1. one-time preprocessing (downloads ScienceQA + writes tiles)

@@ -14,7 +14,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
-WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/eval_sufficiency")
+WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval")
 OUT_ROOT = WORKSPACE / "output"
 PLOT_DIR = OUT_ROOT / "plots"
 PLOT_DIR.mkdir(exist_ok=True)

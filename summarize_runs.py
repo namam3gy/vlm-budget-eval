@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
-WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/eval_sufficiency")
+WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval")
 OUT_ROOT = WORKSPACE / "output"
 
 # Friendly ordering for the comparison table.

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from budget_eval import EvalConfig, main
 
-WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/eval_sufficiency")
+WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval")
 
 cfg = EvalConfig(
     preproc_dir=WORKSPACE / "preproc",

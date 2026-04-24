@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 from budget_eval import EvalConfig, aggregate, load_model_and_processor, load_samples, run_episode
 
-WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/eval_sufficiency")
+WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval")
 OUT_ROOT = WORKSPACE / "output"
 PREPROC = WORKSPACE / "preproc"
 
