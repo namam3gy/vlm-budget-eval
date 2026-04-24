@@ -66,6 +66,10 @@ class EvalConfig:
     policy: str = "model"
     # Override the default SYSTEM_INSTRUCTION (e.g., to test prompt nudges).
     system_instruction: Optional[str] = None
+    # Phase 1c probe: expose a 4th terminal action {"action": "ABSTAIN", "reason": "..."}
+    # cost 0, ends the episode without choosing. When enabled, the system prompt
+    # describes the action and parse_action accepts it.
+    enable_abstain: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +145,27 @@ SYSTEM_INSTRUCTION = (
 )
 
 
+SYSTEM_INSTRUCTION_WITH_ABSTAIN = (
+    "You are answering a multiple-choice question under a limited information budget. "
+    "At each turn you will see the question, the choices, whatever text sentences and "
+    "image tiles have been revealed so far, and how much budget remains.\n"
+    "\n"
+    "You must output ONE JSON object on a single line and nothing else. The valid actions are:\n"
+    '  {"action": "ANSWER", "choice": "A"}        (commit to a choice; ends the episode, costs 0)\n'
+    '  {"action": "ABSTAIN", "reason": "..."}     (refuse to answer; ends the episode, costs 0)\n'
+    '  {"action": "REQUEST_TEXT"}                 (reveal the next text sentence; costs 1)\n'
+    '  {"action": "REQUEST_VISUAL"}               (reveal the next image tile;   costs 1)\n'
+    "\n"
+    "Use ABSTAIN when the available information is genuinely insufficient to choose "
+    "confidently AND additional requests would not plausibly help (e.g. all hints "
+    "exhausted and you still have no signal, or the question is unanswerable from the "
+    "available material). It is better to ABSTAIN than to guess. Otherwise prefer "
+    "REQUEST_TEXT or REQUEST_VISUAL based on which modality is more likely to contain "
+    "the missing information. Answer as soon as you are confident; wasted requests shrink "
+    "your remaining budget."
+)
+
+
 def build_user_content(
     sample: Dict[str, Any],
     revealed_tiles: List[Tuple[int, str, Image.Image]],  # (tile_idx, label, PIL)
@@ -149,6 +174,7 @@ def build_user_content(
     text_left: int,
     visual_left: int,
     force_answer: bool,
+    allow_abstain: bool = False,
 ) -> List[Dict[str, Any]]:
     """Build the user message content (list of text/image blocks)."""
     content: List[Dict[str, Any]] = []
@@ -183,9 +209,15 @@ def build_user_content(
         f"Image tiles still available: {visual_left}",
     ]
     if force_answer:
-        status.append(
-            'You must answer NOW. Output {"action": "ANSWER", "choice": "<letter>"} only.'
-        )
+        if allow_abstain:
+            status.append(
+                'You must terminate NOW. Output {"action": "ANSWER", "choice": "<letter>"} '
+                'or {"action": "ABSTAIN", "reason": "<short reason>"} only.'
+            )
+        else:
+            status.append(
+                'You must answer NOW. Output {"action": "ANSWER", "choice": "<letter>"} only.'
+            )
     else:
         status.append(
             "Output one JSON action and nothing else."
@@ -224,7 +256,7 @@ def generate_once(model, processor, messages, max_new_tokens: int, temperature: 
 JSON_OBJ_RE = re.compile(r"\{[^{}]*\}", re.DOTALL)
 
 
-def parse_action(raw: str) -> Optional[Dict[str, Any]]:
+def parse_action(raw: str, allow_abstain: bool = False) -> Optional[Dict[str, Any]]:
     """Return a normalized action dict or None if unparseable."""
     if not raw:
         return None
@@ -241,7 +273,10 @@ def parse_action(raw: str) -> Optional[Dict[str, Any]]:
     if not isinstance(obj, dict):
         return None
     action = str(obj.get("action", "")).strip().upper()
-    if action not in {"ANSWER", "REQUEST_TEXT", "REQUEST_VISUAL"}:
+    valid = {"ANSWER", "REQUEST_TEXT", "REQUEST_VISUAL"}
+    if allow_abstain:
+        valid.add("ABSTAIN")
+    if action not in valid:
         return None
     out: Dict[str, Any] = {"action": action}
     if action == "ANSWER":
@@ -251,12 +286,20 @@ def parse_action(raw: str) -> Optional[Dict[str, Any]]:
         if choice is None:
             return None
         out["choice"] = str(choice).strip().upper()[:1]
+    elif action == "ABSTAIN":
+        out["reason"] = str(obj.get("reason", "")).strip()[:200]
     return out
 
 
 # ---------------------------------------------------------------------------
 # Per-sample episode
 # ---------------------------------------------------------------------------
+
+def _system_instruction(cfg: EvalConfig) -> str:
+    if cfg.system_instruction is not None:
+        return cfg.system_instruction
+    return SYSTEM_INSTRUCTION_WITH_ABSTAIN if cfg.enable_abstain else SYSTEM_INSTRUCTION
+
 
 def _run_full_info(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rng: random.Random) -> Dict[str, Any]:
     """Ceiling baseline: reveal ALL text sentences + ALL image tiles upfront, ask once."""
@@ -288,18 +331,25 @@ def _run_full_info(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rn
         text_left=0,
         visual_left=0,
         force_answer=True,
+        allow_abstain=cfg.enable_abstain,
     )
     messages = [
-        {"role": "system", "content": [{"type": "text", "text": cfg.system_instruction or SYSTEM_INSTRUCTION}]},
+        {"role": "system", "content": [{"type": "text", "text": _system_instruction(cfg)}]},
         {"role": "user", "content": content},
     ]
     raw = generate_once(model, processor, messages, cfg.max_new_tokens, cfg.temperature)
-    parsed = parse_action(raw)
+    parsed = parse_action(raw, allow_abstain=cfg.enable_abstain)
 
-    final_action = "FORCED_ANSWER" if parsed and parsed["action"] == "ANSWER" else "PARSE_FAIL"
+    if parsed and parsed["action"] == "ANSWER":
+        final_action = "FORCED_ANSWER"
+    elif parsed and parsed["action"] == "ABSTAIN":
+        final_action = "ABSTAIN"
+    else:
+        final_action = "PARSE_FAIL"
     final_choice = parsed.get("choice") if parsed and parsed["action"] == "ANSWER" else None
     correct_letter = str(sample["answer_letter"]).upper()
     is_correct = (final_choice is not None and final_choice.upper() == correct_letter)
+    abstain_count = 1 if final_action == "ABSTAIN" else 0
 
     trace = [{
         "step": 1, "budget_before": 0,
@@ -329,6 +379,7 @@ def _run_full_info(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rn
         "visual_requests": n_tiles,
         "wasted_requests": 0,
         "parse_failures": 0 if parsed else 1,
+        "abstain_count": abstain_count,
         "tile_reveal_order": [int(i) for i in tile_order],
         "text_reveal_order": [int(i) for i in text_order],
         "n_steps": 1,
@@ -371,6 +422,7 @@ def run_episode(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rng: 
     final_choice: Optional[str] = None
     final_raw: Optional[str] = None
     force_next = False
+    abstain_count = 0
 
     # Hard backstop so a misbehaving model can't spin the loop forever.
     max_steps = max(int(cfg.budget), 1) + cfg.max_wasted_before_force + cfg.max_forced_attempts + 4
@@ -409,13 +461,14 @@ def run_episode(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rng: 
                 text_left=text_left,
                 visual_left=visual_left,
                 force_answer=is_forced,
+                allow_abstain=cfg.enable_abstain,
             )
             messages = [
-                {"role": "system", "content": [{"type": "text", "text": cfg.system_instruction or SYSTEM_INSTRUCTION}]},
+                {"role": "system", "content": [{"type": "text", "text": _system_instruction(cfg)}]},
                 {"role": "user", "content": content},
             ]
             raw = generate_once(model, processor, messages, cfg.max_new_tokens, cfg.temperature)
-            parsed = parse_action(raw)
+            parsed = parse_action(raw, allow_abstain=cfg.enable_abstain)
 
         step_entry: Dict[str, Any] = {
             "step": step,
@@ -447,10 +500,18 @@ def run_episode(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rng: 
         step_entry["action"] = act
 
         if is_forced:
-            # After force prompt, only ANSWER is honored.
+            # After force prompt, only terminal actions are honored:
+            #   ANSWER always; ABSTAIN if enabled.
             if act == "ANSWER":
                 final_action = "FORCED_ANSWER"
                 final_choice = parsed.get("choice")
+                final_raw = raw
+                trace.append(step_entry)
+                break
+            if act == "ABSTAIN" and cfg.enable_abstain:
+                abstain_count += 1
+                final_action = "FORCED_ABSTAIN"
+                final_choice = None
                 final_raw = raw
                 trace.append(step_entry)
                 break
@@ -469,6 +530,14 @@ def run_episode(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rng: 
         if act == "ANSWER":
             final_action = "ANSWER"
             final_choice = parsed.get("choice")
+            final_raw = raw
+            trace.append(step_entry)
+            break
+
+        if act == "ABSTAIN":
+            abstain_count += 1
+            final_action = "ABSTAIN"
+            final_choice = None
             final_raw = raw
             trace.append(step_entry)
             break
@@ -536,6 +605,7 @@ def run_episode(model, processor, sample: Dict[str, Any], cfg: EvalConfig, rng: 
         "visual_requests": visual_requests,
         "wasted_requests": wasted,
         "parse_failures": parse_failures,
+        "abstain_count": abstain_count,
         "tile_reveal_order": [int(i) for i in tile_order[:len(revealed_tiles)]],
         "text_reveal_order": [int(i) for i in text_order[:len(revealed_text)]],
         "n_steps": len(trace),
@@ -551,6 +621,10 @@ def aggregate(pred_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
     if pred_df.empty:
         return {"overall": pd.DataFrame(), "by_subject": pd.DataFrame()}
 
+    abstain_mask = pred_df["final_action"].isin(["ABSTAIN", "FORCED_ABSTAIN"]) \
+        if "final_action" in pred_df.columns else pd.Series([False] * len(pred_df))
+    answered_mask = pred_df["final_action"].isin(["ANSWER", "FORCED_ANSWER"]) \
+        if "final_action" in pred_df.columns else pd.Series([True] * len(pred_df))
     overall = pd.DataFrame([{
         "n": len(pred_df),
         "accuracy": float(pred_df["is_correct"].mean()),
@@ -563,6 +637,9 @@ def aggregate(pred_df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         "answered_without_info_rate": float(
             ((pred_df["text_requests"] == 0) & (pred_df["visual_requests"] == 0)).mean()
         ),
+        "abstain_rate": float(abstain_mask.mean()),
+        "answered_acc": float(pred_df.loc[answered_mask, "is_correct"].mean())
+            if answered_mask.any() else float("nan"),
     }])
 
     by_subject = (
@@ -639,6 +716,8 @@ def parse_args(argv=None) -> EvalConfig:
     p.add_argument("--tile-order", default="shuffled", choices=["shuffled", "row_major"])
     p.add_argument("--text-order", default="natural", choices=["natural", "shuffled"])
     p.add_argument("--no-trace", action="store_true")
+    p.add_argument("--enable-abstain", action="store_true",
+                   help="Phase 1c probe: expose ABSTAIN action in the policy")
     args = p.parse_args(argv)
     kwargs = {k.replace("-", "_"): v for k, v in vars(args).items() if k != "no_trace"}
     kwargs["save_trace"] = not args.no_trace
