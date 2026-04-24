@@ -25,7 +25,7 @@ from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
 
-from budget_eval import (
+from vlm_budget_eval import (
     EvalConfig,
     aggregate,
     load_model_and_processor,

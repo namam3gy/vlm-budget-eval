@@ -22,12 +22,24 @@ Visual hints are implemented as **multi-image reveal**: the source image is pre-
 
 Text hints are sentences split from `hint + lecture`, revealed in natural order by default.
 
+## Layout
+
+```
+src/vlm_budget_eval/budget_eval.py  # core engine (EvalConfig + run_episode + main)
+scripts/                            # executable drivers (preprocessing, experiment_runner, run_*, analyze_*, summarize_runs)
+notebooks/experiment.ipynb          # 37-cell pre-executed demo
+docs/figures/                       # headline figures (tracked)
+docs/insights/                      # insights.md (EN) + insights_ko.md (KO)
+references/                         # project.md/_ko.md (paper-scope plan), roadmap.md/_ko.md (living progress)
+configs/, tests/                    # reserved
+```
+
 ## Pipeline
 
 | Script | When to run | Reads | Writes |
 |---|---|---|---|
-| `preprocessing.py` | Once, to build the eval subset | `derek-thomas/ScienceQA` via `datasets.load_dataset` | `preproc/samples.{parquet,jsonl}`, `preproc/preproc_meta.json`, `preproc/images/full/*.png`, `preproc/images/tiles/*.png` |
-| `budget_eval.py` (via `experiment_runner.py`) | Each eval run | `preproc/` | `<out_dir>/predictions.{parquet,csv,jsonl}`, `<out_dir>/summary_{overall,by_subject}.{csv,jsonl}` |
+| `scripts/preprocessing.py` | Once, to build the eval subset | `derek-thomas/ScienceQA` via `datasets.load_dataset` | `preproc/samples.{parquet,jsonl}`, `preproc/preproc_meta.json`, `preproc/images/full/*.png`, `preproc/images/tiles/*.png` |
+| `src/vlm_budget_eval/budget_eval.py` (via `scripts/experiment_runner.py`) | Each eval run | `preproc/` | `<out_dir>/predictions.{parquet,csv,jsonl}`, `<out_dir>/summary_{overall,by_subject}.{csv,jsonl}` |
 
 `preproc/` must be rebuilt for this project — the old VQAv2-era files under `preproc/` (`qa_subset.parquet`, `images/original/...`) are NOT consumed by the new pipeline. Safe to delete them.
 
@@ -38,13 +50,13 @@ cd /mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval
 uv sync
 
 # 1. one-time preprocessing (downloads ScienceQA + writes tiles)
-uv run python preprocessing.py --max-samples 500 --tile-grid 2
+uv run python scripts/preprocessing.py --max-samples 500 --tile-grid 2
 
 # 2. eval
-uv run python experiment_runner.py
+uv run python scripts/experiment_runner.py
 ```
 
-`experiment_runner.py` is a thin `EvalConfig(...); main(cfg)` driver. `budget_eval.py` also has an argparse CLI (`parse_args()`) if you'd rather pass flags directly.
+`scripts/experiment_runner.py` is a thin `EvalConfig(...); main(cfg)` driver. The core module is importable as `from vlm_budget_eval import EvalConfig, main, run_episode, ...` and also exposes an argparse CLI via `parse_args()` if you'd rather pass flags directly.
 
 Key `EvalConfig` knobs:
 - `budget`: total actions across both modalities. `ANSWER` costs 0; each reveal costs 1. Wasted requests (exhausted modality, unparseable JSON) also cost 1.

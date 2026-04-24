@@ -1,8 +1,8 @@
 # 인사이트 노트 — Budget-Constrained Sequential Information-Seeking
 
-> Qwen2.5-VL-7B-Instruct를 ScienceQA 500개 샘플에서 budget sweep(b=0…10) + 베이스라인 정책 4종으로 평가한 결과. 자세한 데모는 [`experiment.ipynb`](./experiment.ipynb), 원시 데이터는 [`output/`](./output) 참고.
+> Qwen2.5-VL-7B-Instruct를 ScienceQA 500개 샘플에서 budget sweep(b=0…10) + 베이스라인 정책 4종으로 평가한 결과. 자세한 데모는 [`experiment.ipynb`](../../notebooks/experiment.ipynb), 원시 데이터는 [`output/`](../../output) 참고.
 >
-> **Figure 노트**: 헤드라인 figure 5장은 `docs/` 아래에 tracked로 복사되어 있고 본문이 이를 링크함. 그 외 보조 plot 참조는 `output/plots/` 아래의 gitignored 경로 — `analyze_calibration.py` / `analyze_difficulty.py` / `analyze_abstention.py` 재실행 시 로컬에서 재생성됨.
+> **Figure 노트**: 헤드라인 figure 5장은 `docs/figures/` 아래에 tracked로 복사되어 있고 본문이 이를 링크함. 그 외 보조 plot 참조는 `output/plots/` 아래의 gitignored 경로 — `analyze_calibration.py` / `analyze_difficulty.py` / `analyze_abstention.py` 재실행 시 로컬에서 재생성됨.
 
 ## 용어: Sweep
 
@@ -28,10 +28,10 @@ for b in BUDGETS:
 ## 0. 한 눈에 보기
 
 ### Budget vs. accuracy
-![accuracy vs budget](output/plots/accuracy_vs_budget.png)
+![accuracy vs budget](../figures/accuracy_vs_budget.png)
 
 ### 정책별 모달리티 사용량
-![modality mix](output/plots/modality_mix.png)
+![modality mix](../figures/modality_mix.png)
 
 ### 전체 비교표
 
@@ -191,7 +191,7 @@ dense sweep (b=0,1,2,3,4,5,6,7,8,10):
 
 ## ⑤ Early-stop 신호는 b≤3에서만 calibrated — b≥4부터는 무용
 
-**Phase 1a Metric A** ([`output/calibration/summary.csv`](./output/calibration/summary.csv), 그림: [`docs/calibration_A_spontaneous_vs_forced_acc.png`](./docs/calibration_A_spontaneous_vs_forced_acc.png))
+**Phase 1a Metric A** ([`output/calibration/summary.csv`](../../output/calibration/summary.csv), 그림: [`docs/calibration_A_spontaneous_vs_forced_acc.png`](../figures/calibration_A_spontaneous_vs_forced_acc.png))
 
 같은 budget run에서 자발 ANSWER로 종료한 샘플 vs FORCED_ANSWER로 종료한 샘플의 정답률 차이.
 
@@ -215,7 +215,7 @@ dense sweep (b=0,1,2,3,4,5,6,7,8,10):
 
 ## ⑥ Cross-budget 답 안정성 = 무료 confidence proxy
 
-**Phase 1a Metric B** ([`per_sample_stability.csv`](./output/calibration/per_sample_stability.csv), 그림: [`B_choice_stability.png`](./output/plots/calibration/B_choice_stability.png))
+**Phase 1a Metric B** ([`per_sample_stability.csv`](../../output/calibration/per_sample_stability.csv), 그림: [`B_choice_stability.png`](../../output/plots/calibration/B_choice_stability.png))
 
 같은 sample을 budget 10 point(b=0,1,2,3,4,5,6,7,8,10)에서 풀었을 때 final_choice가 얼마나 일관적인가:
 
@@ -238,7 +238,7 @@ stability bin × modal 정답률:
 
 ## ⑦ Stop-step 별 정답률 — info=2에서 peak, info=3부터 −20pp 급락
 
-**Phase 1a Metric C** ([`stop_step_acc.csv`](./output/calibration/stop_step_acc.csv), 그림: [`C_stop_step_accuracy.png`](./output/plots/calibration/C_stop_step_accuracy.png))
+**Phase 1a Metric C** ([`stop_step_acc.csv`](../../output/calibration/stop_step_acc.csv), 그림: [`C_stop_step_accuracy.png`](../../output/plots/calibration/C_stop_step_accuracy.png))
 
 모든 자발 ANSWER trajectory를 (run에 무관하게) stop step별로 묶어서 정답률:
 
@@ -261,7 +261,7 @@ Caveat: selection bias 있음 (info=k에서 stop하는 샘플들이 어떤 budge
 
 ## ⑧ 모델은 "이미 안다"를 인지하지 못한다 — easy/hard 샘플이 거의 같은 양 정보 요구
 
-**Phase 1a Metric F** ([`zero_info_cohort.csv`](./output/calibration/zero_info_cohort.csv), 그림: [`docs/calibration_F_zero_info_cohort.png`](./docs/calibration_F_zero_info_cohort.png))
+**Phase 1a Metric F** ([`zero_info_cohort.csv`](../../output/calibration/zero_info_cohort.csv), 그림: [`docs/calibration_F_zero_info_cohort.png`](../figures/calibration_F_zero_info_cohort.png))
 
 zero_info(정보 없이 답)에서 **정답이었던 샘플 281개(zi_correct)** vs **오답이었던 샘플 219개(zi_wrong)** 두 코호트로 나눠서 비교:
 
@@ -283,7 +283,7 @@ zero_info(정보 없이 답)에서 **정답이었던 샘플 281개(zi_correct)**
 
 ## ⑨ Forced→Spontaneous 답 일치율 84% — 추가 정보가 모델 답을 거의 안 바꾼다
 
-**Phase 1a Metric D** ([`forced_vs_spon.csv`](./output/calibration/forced_vs_spon.csv))
+**Phase 1a Metric D** ([`forced_vs_spon.csv`](../../output/calibration/forced_vs_spon.csv))
 
 같은 sample이 작은 budget에서 FORCED_ANSWER로 끝났고 큰 budget에서는 자발 ANSWER로 끝난 1,981 페어:
 
@@ -299,7 +299,7 @@ zero_info(정보 없이 답)에서 **정답이었던 샘플 281개(zi_correct)**
 
 ## ⑩ Modality bias는 zi_wrong 코호트에서만 손해 — zi_correct에서는 modality 무관
 
-**Phase 1b** ([`output/difficulty/cohort_curve.csv`](./output/difficulty/cohort_curve.csv), 그림: [`docs/difficulty_A_cohort_accuracy_curve.png`](./docs/difficulty_A_cohort_accuracy_curve.png))
+**Phase 1b** ([`output/difficulty/cohort_curve.csv`](../../output/difficulty/cohort_curve.csv), 그림: [`docs/difficulty_A_cohort_accuracy_curve.png`](../figures/difficulty_A_cohort_accuracy_curve.png))
 
 b=6 reference policy를 코호트별로 분해:
 
@@ -320,7 +320,7 @@ b=6 reference policy를 코호트별로 분해:
 
 ## ⑪ Budget이 쉬운 샘플을 망치고 어려운 샘플을 살리는 비대칭 (clean cross-over at b=1)
 
-**Phase 1b** (그림: [`docs/difficulty_D_delta_from_b1.png`](./docs/difficulty_D_delta_from_b1.png))
+**Phase 1b** (그림: [`docs/difficulty_D_delta_from_b1.png`](../figures/difficulty_D_delta_from_b1.png))
 
 b=1 정확도를 baseline으로 놓고 budget 늘릴 때 코호트별 정답률 변화:
 
@@ -345,7 +345,7 @@ b=1 정확도를 baseline으로 놓고 budget 늘릴 때 코호트별 정답률 
 
 ## ⑫ Subject 경제학: natural science는 high-volatility, social science는 low-volatility
 
-**Phase 1b** ([`subject_cohort_sizes.csv`](./output/difficulty/subject_cohort_sizes.csv), [`subject_cohort_accuracy.csv`](./output/difficulty/subject_cohort_accuracy.csv), 그림: [`C_subject_cohort.png`](./output/plots/difficulty/C_subject_cohort.png))
+**Phase 1b** ([`subject_cohort_sizes.csv`](../../output/difficulty/subject_cohort_sizes.csv), [`subject_cohort_accuracy.csv`](../../output/difficulty/subject_cohort_accuracy.csv), 그림: [`C_subject_cohort.png`](../../output/plots/difficulty/C_subject_cohort.png))
 
 | subject | total n | zi_correct | zi_wrong | zi_correct frac |
 |---|---:|---:|---:|---:|
@@ -369,7 +369,7 @@ b=1 정확도를 baseline으로 놓고 budget 늘릴 때 코호트별 정답률 
 
 ## ⑬ 모델은 ABSTAIN을 쓸 수 있지만, "답할지 말지" 판단은 zero_info 사전지식 신호와 거의 겹친다
 
-**Phase 1c Metric A + D** ([`output/abstention/summary.csv`](./output/abstention/summary.csv), [`aligned_comparison.csv`](./output/abstention/aligned_comparison.csv))
+**Phase 1c Metric A + D** ([`output/abstention/summary.csv`](../../output/abstention/summary.csv), [`aligned_comparison.csv`](../../output/abstention/aligned_comparison.csv))
 
 4-action 버전(ANSWER / ABSTAIN / REQUEST_TEXT / REQUEST_VISUAL)을 system prompt에 노출하고 두 budget에서 측정:
 
@@ -391,7 +391,7 @@ b=1 정확도를 baseline으로 놓고 budget 늘릴 때 코호트별 정답률 
 
 ## ⑭ Vanilla abstention은 b=6에서 오히려 anti-calibrated
 
-**Phase 1c Metric B** ([`output/abstention/cohort_xtab.csv`](./output/abstention/cohort_xtab.csv), 그림: [`docs/abstention_B_cohort_abstain.png`](./docs/abstention_B_cohort_abstain.png))
+**Phase 1c Metric B** ([`output/abstention/cohort_xtab.csv`](../../output/abstention/cohort_xtab.csv), 그림: [`docs/abstention_B_cohort_abstain.png`](../figures/abstention_B_cohort_abstain.png))
 
 zi_correct/zi_wrong 코호트별 abstain rate:
 
@@ -407,10 +407,10 @@ zi_correct/zi_wrong 코호트별 abstain rate:
 **b=6에서는 방향 뒤집힘 — anti-calibration**: 모델은 zi_correct에서 **더 자주 abstain**(12.1%)하고 zi_wrong에서 **덜 abstain**(7.3%). Budget이 있으면 어려운 샘플도 그냥 답해버리고, 오히려 쉬운 샘플에서 가끔 겁먹고 abstain. 결과:
 
 - abstain_b6 selective acc (0.644) < main_b6 overall (0.656)
-- Effective Reliability Φ curve는 모든 wrong-answer cost c ∈ [0, 2]에서 abstain_b6 < main_b6 ([`phi_curve.csv`](./output/abstention/phi_curve.csv)). 즉 **b=6에서 vanilla abstention을 쓰는 건 어떤 cost regime에서도 손해**.
+- Effective Reliability Φ curve는 모든 wrong-answer cost c ∈ [0, 2]에서 abstain_b6 < main_b6 ([`phi_curve.csv`](../../output/abstention/phi_curve.csv)). 즉 **b=6에서 vanilla abstention을 쓰는 건 어떤 cost regime에서도 손해**.
 - 반면 abstain_b0 Φ는 c ≥ 1.25에서 zero_info를 역전함 (wrong-answer cost 높을 때 abstention이 값어치 가짐).
 
-→ **단순 prompt 노출만으로는 모델이 abstention을 "지금 나 모르니까 안 답한다"로 쓰지 않고, budget이 있으면 "필요 없는 장치"로 취급하거나 잘못 배치함**. 이게 `research_plan.md` Thread D (R-Tuning / MM-UPD) 방식의 **training-for-abstention이 왜 필수**인지에 대한 직접 증거 — Phase 4 GRPO reward에 abstention 항(`λ_cal` 올바른 abstain, `λ_abs` 잘못된 abstain)을 넣는 디자인 근거.
+→ **단순 prompt 노출만으로는 모델이 abstention을 "지금 나 모르니까 안 답한다"로 쓰지 않고, budget이 있으면 "필요 없는 장치"로 취급하거나 잘못 배치함**. 이게 `project_ko.md` Thread D (R-Tuning / MM-UPD) 방식의 **training-for-abstention이 왜 필수**인지에 대한 직접 증거 — Phase 4 GRPO reward에 abstention 항(`λ_cal` 올바른 abstain, `λ_abs` 잘못된 abstain)을 넣는 디자인 근거.
 
 ---
 
@@ -429,7 +429,7 @@ zi_correct/zi_wrong 코호트별 abstain rate:
 
 ## 다음 단계 후보
 
-다음 단계는 [`ROADMAP.md`](./ROADMAP.md)에 phase별로 정리되어 있음. Phase 1a (calibration ⑤–⑨) 완료. 다음 우선순위:
+다음 단계는 [`roadmap_ko.md`](../../references/roadmap_ko.md)에 phase별로 정리되어 있음. Phase 1a (calibration ⑤–⑨) 완료. 다음 우선순위:
 
 - **Phase 1b** Difficulty stratification: zero_info 코호트로 budget curve 다시 그리기 (어떤 budget이 어떤 코호트에 효과적인지 분리)
 - **Phase 1c** Abstention proxy: vanilla 모델이 ABSTAIN action을 얼마나 쓰는지 + sufficiency-known 작은 set 만들기
@@ -440,7 +440,7 @@ zi_correct/zi_wrong 코호트별 abstain rate:
 
 ## 산출물 위치
 
-- `experiment.ipynb` — 데모 노트북 (이 문서의 시각화·표 모두 포함)
+- `notebooks/experiment.ipynb` — 데모 노트북 (이 문서의 시각화·표 모두 포함)
 - `output/all_runs_summary.csv` — 위의 비교표 원본
 - `output/subject_crosstab.csv` — subject × 정책 cross-tab
 - `output/visual_bias_breakdown.csv` — sample-level main vs always_visual bucket
@@ -454,4 +454,4 @@ zi_correct/zi_wrong 코호트별 abstain rate:
 - `output/abstain_b0/`, `output/abstain_b6/` — Phase 1c raw prediction (run_abstention.py 결과)
 - `output/abstention/` — Phase 1c 분석 산출물 (summary / cohort_xtab / phi_curve / aligned_comparison)
 - `output/plots/abstention/{A,B,C}_*.png` — abstention 시각화
-- `docs/*.png` — INSIGHTS 헤드라인 figure 5장 (복사본, 아래 "figure" 절 참조)
+- `docs/figures/*.png` — insights 헤드라인 figure 5장 (복사본, 아래 "figure" 절 참조)
