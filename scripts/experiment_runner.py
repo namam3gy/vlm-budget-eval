@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from budget_eval import EvalConfig, main
+from vlm_budget_eval import EvalConfig, main
 
 WORKSPACE = Path("/mnt/ddn/prod-runs/thyun.park/src/vlm_budget_eval")
 

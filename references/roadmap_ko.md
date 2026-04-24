@@ -1,6 +1,6 @@
 # ROADMAP — Budget-conditional VLM agents
 
-> 살아 있는 진행 추적 문서. **paper-scope 계획은 [`research_plan.md`](./research_plan.md)** (변경 금지에 가까운 reference), 이 문서는 그 계획 대비 현재 어디까지 왔는지 + 다음 단위 작업 + 인사이트 발굴 액션을 정리한다. 의미 있는 변화가 있을 때마다 업데이트.
+> 살아 있는 진행 추적 문서. **paper-scope 계획은 [`project_ko.md`](./project_ko.md)** (변경 금지에 가까운 reference), 이 문서는 그 계획 대비 현재 어디까지 왔는지 + 다음 단위 작업 + 인사이트 발굴 액션을 정리한다. 의미 있는 변화가 있을 때마다 업데이트.
 
 마지막 업데이트: 2026-04-24 (Phase 1a + 1b + 1c 완료)
 
@@ -8,7 +8,7 @@
 
 ## 0. 한 줄 요약
 
-`research_plan.md`의 Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) 완료. 6-action / SFT+GRPO / Pareto 학습은 아직 0%. 다음 단계는 **Phase 2 (action space 6개로 확장) → Phase 3 (SFT 데이터 파이프라인) → Phase 4 (GRPO 학습)**.
+`project_ko.md`의 Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) 완료. 6-action / SFT+GRPO / Pareto 학습은 아직 0%. 다음 단계는 **Phase 2 (action space 6개로 확장) → Phase 3 (SFT 데이터 파이프라인) → Phase 4 (GRPO 학습)**.
 
 Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). paper motivation으로 가장 강한 3가지:
 
@@ -39,7 +39,7 @@ Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). pap
 - Budget sweep b=1..10 (모델 정책)
 - `nudge_b6` (visual-favor system prompt 변형)
 - 분석 산출물: `output/all_runs_summary.csv`, `output/visual_bias_breakdown.csv`, `output/plots/`
-- 노트북 `experiment.ipynb` (37셀 사전 실행) + `INSIGHTS.md`
+- 노트북 `experiment.ipynb` (37셀 사전 실행) + `insights_ko.md`
 
 ---
 
@@ -52,13 +52,13 @@ Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). pap
 3. **단일 prompt nudge는 행동 100% 뒤집지만 정확도 +0.4pp만** — modality 선호는 한 줄로 즉시 반전(text 3.28→0.01)되는데 accuracy는 0.656→0.660. **prompt-only intervention 한계의 정량 증거.**
 4. **Visual_only 정답 43개(8.6%)를 main이 놓침** — 비전이 답이었던 케이스에서조차 모델은 평균 text 3.91/visual 0.81 사용. language science에서 21.4%로 가장 심각. 도메인 효과 + bias 동시 입증.
 
-(자세한 내용은 [`INSIGHTS.md`](./INSIGHTS.md))
+(자세한 내용은 [`insights_ko.md`](../docs/insights/insights_ko.md))
 
 ---
 
 ## 3. 계획서 대비 갭 매트릭스
 
-| research_plan.md 요소 | 현재 | 갭 메우는 작업 |
+| project_ko.md 요소 | 현재 | 갭 메우는 작업 |
 |---|---|---|
 | 6-action vocab | 3-action | `ABSTAIN` / `THINK` / `ZOOM(bbox)` / `REQUEST_HI_RES` 추가 (Phase 2) |
 | Token-based cost | per-call cost | 비전 토큰 수, CoT 토큰 수 정확 산정 (Phase 2) |
@@ -89,7 +89,7 @@ Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). pap
   - 텍스트 편향이 model-specific인지 task-driven인지 분리
   - 산출: `output/secondary_vlm/` + 비교표
 
-**Exit criterion of Phase 1**: 위 4개 중 1a + 1b + 1c 완료. 1d는 옵션. INSIGHTS.md에 4가지 발견 추가 → 6가지로.
+**Exit criterion of Phase 1**: 위 4개 중 1a + 1b + 1c 완료. 1d는 옵션. insights_ko.md에 4가지 발견 추가 → 6가지로.
 
 ### Phase 2 — Action space 확장 (training 없이, 1-1.5주)
 
@@ -201,7 +201,7 @@ Phase 1 완전 종료 — 남은 선택지는 두 축이다:
 
 | 날짜 | 변경 |
 |---|---|
-| 2026-04-24 | 초기 작성. Phase 0 완료 캡처, research_plan.md와 갭 매트릭스 작성, 5-phase 로드맵 + insight backlog 정의. |
+| 2026-04-24 | 초기 작성. Phase 0 완료 캡처, project_ko.md와 갭 매트릭스 작성, 5-phase 로드맵 + insight backlog 정의. |
 | 2026-04-24 | Phase 1a 완료. `analyze_calibration.py` 신규 추가, 6개 metric 결과 `output/calibration/` + `output/plots/calibration/`로 떨어짐. INSIGHTS에 ⑤–⑨ 다섯 발견 추가. 다음 작업 Phase 1b로 전환. Insight backlog I5에 ✅ 표시, I11/I12 추가. |
 | 2026-04-24 | Phase 1b 완료. `analyze_difficulty.py` 추가, cohort curve + modality mix + subject crosstab + delta-from-b1 산출. INSIGHTS ⑩–⑫ 추가 (특히 ⑪ cross-over at b=1은 paper figure 후보). |
-| 2026-04-24 | Phase 1c 완료 (scope-cut noted). `budget_eval.py`에 `enable_abstain` + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` 추가. `run_abstention.py` + `analyze_abstention.py` 신규. `abstain_b0` + `abstain_b6` 500샘플 실행. INSIGHTS ⑬–⑭ 추가 — ⑭ anti-calibration 이 budget-conditional training 필요성의 직접 증거. sufficiency-known mini-set은 backlog I13으로 이월. 헤드라인 figure 5장 `docs/`로 복사. Phase 1a+1b+1c 번들로 commit. |
+| 2026-04-24 | Phase 1c 완료 (scope-cut noted). `budget_eval.py`에 `enable_abstain` + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` 추가. `run_abstention.py` + `analyze_abstention.py` 신규. `abstain_b0` + `abstain_b6` 500샘플 실행. INSIGHTS ⑬–⑭ 추가 — ⑭ anti-calibration 이 budget-conditional training 필요성의 직접 증거. sufficiency-known mini-set은 backlog I13으로 이월. 헤드라인 figure 5장 `docs/figures/`로 복사. Phase 1a+1b+1c 번들로 commit. |
