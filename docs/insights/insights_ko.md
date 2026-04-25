@@ -473,6 +473,88 @@ zi_correct/zi_wrong 코호트별 abstain rate:
 
 ---
 
+## ⑰ V*Bench에서 모델 adaptive policy가 brute-force를 +5.3pp 능가 — ScienceQA의 ①을 reverse
+
+**Phase 2.0 / V*Bench A** ([`output/vstar/policy_summary.csv`](../../output/vstar/policy_summary.csv), 그림: [`docs/figures/vstar_A_policy_accuracy.png`](../figures/vstar_A_policy_accuracy.png))
+
+V*Bench는 vision-only visual-search 벤치마크 (191 sample, ~2000×1500 high-res, 텍스트 hint 없음). ScienceQA와 달리 사전지식만으로는 풀기 매우 어려움 (zero_info 0.120 vs ScienceQA 0.562).
+
+| 정책 (V*Bench) | accuracy | mean_visual | note |
+|---|---:|---:|---|
+| zero_info (b=0) | 0.120 | 0.00 | 사전지식 floor |
+| b=2 model | 0.424 | 1.87 | 큰 lift +30pp |
+| **b=4 model** | **0.440** | 3.41 | **best** |
+| always_visual b=4 | 0.387 | 4.00 | brute-force |
+| full_info | 0.382 | 4.00 | ceiling? |
+
+**모델 adaptive (b=4)가 always_visual을 +5.3pp 이긴다**. ScienceQA ①은 정반대였음 (always_visual 0.680 > main_b6 0.656). 차이의 원인:
+- ScienceQA는 multimodal: text가 default action으로 매력적으로 보여서 모델이 잘못 선택. always_visual이 그 편향을 우회.
+- V*Bench는 vision-only: text가 사실상 부재이므로 default text 편향 자체가 발생할 수 없음. 그 결과 모델이 visual 선별에 집중 → adaptive policy가 brute-force보다 효율적.
+
+→ ScienceQA에서 발견한 "always_visual이 모델보다 낫다"는 **multimodal-domain artifact**였음. 진짜 vision 도메인에서는 모델 정보 선별이 작동. ⑩(modality bias는 zi_wrong cohort에서만 손해)과 결합하면 결론은 한 줄: **모달리티 편향은 text 옵션이 vocab에 있을 때만 발현되며, 그 선택이 잘못된 cohort에 적용된다**.
+
+---
+
+## ⑱ relative_position은 b=2에서 peak, full_info에서 dip (−24pp) — ④ 비단조성이 spatial reasoning에서 극대화
+
+**Phase 2.0 / V*Bench D** ([`output/vstar/subject_xtab.csv`](../../output/vstar/subject_xtab.csv), 그림: [`docs/figures/vstar_D_topic_xtab.png`](../figures/vstar_D_topic_xtab.png))
+
+V*Bench는 두 토픽으로 나뉨: `direct_attributes` (n=115, "What color is the X?", "What material is Y?") + `relative_position` (n=76, "Is X on the left or right of Y?"). 정책별 정확도:
+
+| 정책 | direct_attributes | relative_position | gap |
+|---|---:|---:|---:|
+| zero_info | 0.07 | 0.20 | +13pp |
+| b=2 model | 0.41 | **0.45** | +4pp |
+| b=4 model | **0.49** | 0.37 | −12pp |
+| always_visual b=4 | 0.50 | 0.22 | **−28pp** |
+| full_info | **0.50** | 0.21 | **−29pp** |
+
+direct_attributes는 monotonic 0.07 → 0.50 (정보가 더해질수록 좋음). 그런데 **relative_position은 b=2 (0.45) peak → full_info (0.21) dip**, **−24pp**. 4 tile 모두 보여줄수록 정확도가 떨어진다.
+
+해석: relative_position 질문은 두 객체의 spatial relationship을 묻는다 ("X가 Y의 왼쪽인가 오른쪽인가"). 4개 tile로 쪼개면 spatial context가 fragment되고, 각 tile이 독립적으로 처리되면서 객체 간 상대 위치 정보를 잃음. 적은 budget에서는 모델이 relevant 영역만 골라 보여줘서 spatial integration이 가능하지만, brute-force로 모든 tile을 다 보여주면 오히려 decision boundary가 흐려짐.
+
+ScienceQA ④에서 본 b=3 dip이 V*Bench에서 더 강하게, 더 systematic하게 일반화됨 — **공간 추론을 요구하는 sub-task일수록 selective revealing이 본질적으로 우월**. paper의 ZOOM(bbox) action(Phase 2b)이 정당화되는 직접 증거: relative_position 코호트는 "전체를 다 보지 말고, 두 객체 위치를 한 번에 비교 가능한 crop을 직접 선택"해야 풀린다.
+
+---
+
+## ⑲ V*Bench에서 text request = 0 (5 runs 전체) — modality 옵션이 진짜 부재할 때 모델은 즉시 인지
+
+**Phase 2.0 / V*Bench B** ([`output/plots/vstar/B_modality_mix.png`](../../output/plots/vstar/B_modality_mix.png))
+
+| 정책 | mean_text_requests | mean_visual_requests | mean_wasted |
+|---|---:|---:|---:|
+| zero_info | 0.00 | 0.00 | 0.00 |
+| b=2 model | **0.00** | 1.87 | 0.05 |
+| b=4 model | **0.00** | 3.41 | 0.17 |
+| always_visual b=4 | 0.00 | 4.00 | 0.00 |
+| full_info | 0.00 | 4.00 | 0.00 |
+
+ScienceQA의 main_b6은 mean text 3.28 / visual 0.87 (text를 3.8× 더 선호). V*Bench에서 같은 모델이 mean text **0.00** / visual 1.87–3.41 — **default text 편향이 사라짐**.
+
+해석:
+- text가 modality vocab에 명목상 존재하지만 실제로는 0개 hint → 첫 wasted action으로 즉시 학습
+- mean_wasted 0.05–0.17은 1–2 sample이 한 번 시도하고 멈춤 → 빠른 수렴
+- ScienceQA의 text 편향은 **text가 sentence-level lecture로 풍부하게 존재**한다는 사실에 대한 합리적 반응이었음. V*Bench는 그 trigger가 없어서 모델이 즉시 visual-only mode로 전환
+
+→ ⑩의 정교화: **모달리티 편향은 두 modality가 모두 의미 있게 존재할 때만 발생**. 한쪽이 비어있는 도메인에서는 모델이 적응적으로 비어있는 쪽을 무시. paper 일반화에 중요한 점: ScienceQA에서 본 텍스트 편향은 ScienceQA의 text-rich 특성에서 비롯된 dataset effect이지, 모델의 fundamental flaw가 아님.
+
+---
+
+## ⑳ V*Bench zero_info = 0.120 (ScienceQA 0.562의 1/4.7배) — 진짜 vision-only QA
+
+V*Bench는 image 없이는 풀 수 없는 visual search task로 설계됨. zero_info accuracy 0.120 (직역하면 25% random인 4-option MCQ보다 더 낮음)이 그 증거.
+
+| benchmark | zero_info acc | full_info acc | floor-ceiling gap |
+|---|---:|---:|---:|
+| ScienceQA | 0.562 | 0.700 | 14pp |
+| V*Bench | 0.120 | 0.382 | 26pp |
+
+V*Bench는 이미지 정보 단독으로 +26pp 활용 가능 (ScienceQA는 +14pp). 즉 **V*Bench는 이미지가 본질적으로 정보적인 데이터셋** — Phase 1c의 ⑯ caveat ("ScienceQA의 image-masking이 결정적 sufficiency 테스트가 아닌 이유")의 해결책이 될 수 있음. V*Bench에서 image-masked 변형을 만들면 sufficiency 부재가 직접적 — 4 tile 마스킹 시 zero_info 0.120 수준으로 떨어질 것이 강하게 예측됨. 이게 backlog I15의 본격 실험 candidate.
+
+또: zero_info 토픽별 분해 — direct_attributes 0.07 (random보다 낮음, attribute 질문은 추측 불가능), relative_position 0.20 (random에 가까움, "left or right" 같은 binary 패턴이 통계적 추측 가능). 정보 없을 때 모델이 의지할 수 있는 것은 **질문 텍스트의 표면 패턴뿐**.
+
+---
+
 ## 한계와 caveats
 
 - **단일 모델**: Qwen2.5-VL-7B만 평가. 모달리티 편향이 모델 fine-tuning 패턴에 종속될 가능성 — LLaVA/InternVL은 다를 수 있음.

@@ -473,6 +473,88 @@ These two effects mix and we cannot fully separate them, but the conclusion that
 
 ---
 
+## ⑰ On V*Bench, the model's adaptive policy beats brute-force by +5.3pp — reversing ScienceQA finding ①
+
+**Phase 2.0 / V*Bench A** ([`output/vstar/policy_summary.csv`](../../output/vstar/policy_summary.csv), figure: [`docs/figures/vstar_A_policy_accuracy.png`](../figures/vstar_A_policy_accuracy.png))
+
+V*Bench is a vision-only visual-search benchmark (191 samples, ~2000×1500 high-res images, no text hints). Unlike ScienceQA, prior knowledge is almost useless here: zero_info accuracy is 0.120 (vs 0.562 on ScienceQA).
+
+| Policy (V*Bench) | accuracy | mean_visual | note |
+|---|---:|---:|---|
+| zero_info (b=0) | 0.120 | 0.00 | prior-knowledge floor |
+| b=2 model | 0.424 | 1.87 | +30pp lift |
+| **b=4 model** | **0.440** | 3.41 | **best** |
+| always_visual b=4 | 0.387 | 4.00 | brute-force |
+| full_info | 0.382 | 4.00 | ceiling? |
+
+**The model's adaptive (b=4) policy beats always_visual by +5.3pp**. ScienceQA finding ① went the other way (always_visual 0.680 > main_b6 0.656). Why the flip:
+- ScienceQA is multimodal: text feels like an attractive default action, so the model picks it suboptimally. always_visual sidesteps that bias.
+- V*Bench is vision-only: text is effectively absent, so the default-text bias cannot manifest. The model focuses on visual selection → adaptive policy is more efficient than brute-force.
+
+→ The "always_visual beats the model" effect on ScienceQA was a **multimodal-domain artifact**. In a genuine vision-only domain, model information selection works. Combined with ⑩ (modality bias only hurts on the zi_wrong cohort), the one-line summary becomes: **modality bias only manifests when text is in the action vocabulary, and even then it only hurts the cohort where the choice matters**.
+
+---
+
+## ⑱ relative_position peaks at b=2 and dips at full_info (−24pp) — finding ④'s non-monotonicity is amplified for spatial reasoning
+
+**Phase 2.0 / V*Bench D** ([`output/vstar/subject_xtab.csv`](../../output/vstar/subject_xtab.csv), figure: [`docs/figures/vstar_D_topic_xtab.png`](../figures/vstar_D_topic_xtab.png))
+
+V*Bench splits into two topics: `direct_attributes` (n=115, "What color is X?", "What material is Y?") and `relative_position` (n=76, "Is X on the left or right of Y?"). Accuracy by policy:
+
+| Policy | direct_attributes | relative_position | gap |
+|---|---:|---:|---:|
+| zero_info | 0.07 | 0.20 | +13pp |
+| b=2 model | 0.41 | **0.45** | +4pp |
+| b=4 model | **0.49** | 0.37 | −12pp |
+| always_visual b=4 | 0.50 | 0.22 | **−28pp** |
+| full_info | **0.50** | 0.21 | **−29pp** |
+
+direct_attributes is monotone 0.07 → 0.50 (more info is better). But **relative_position peaks at b=2 (0.45) and dips at full_info (0.21)**, **−24pp**. The more tiles you reveal, the worse the accuracy.
+
+Interpretation: relative_position questions ask about a spatial relationship between two objects ("Is X left or right of Y?"). Splitting the image into 4 tiles fragments the spatial context — each tile is processed independently and the relative-position cue between objects is lost. At low budget the model selects only relevant tiles, preserving spatial integration; the brute-force four-tile reveal blurs the decision boundary.
+
+The b=3 dip from ScienceQA finding ④ generalizes onto V*Bench in a stronger and more systematic form: **selective revealing is intrinsically superior on sub-tasks that require spatial reasoning**. Direct quantitative justification for the paper's `ZOOM(bbox)` action (Phase 2b): the relative_position cohort needs "don't view everything, instead crop a region that shows both objects together".
+
+---
+
+## ⑲ V*Bench text-request count is 0 across all five runs — when the modality option is genuinely absent the model recognises it instantly
+
+**Phase 2.0 / V*Bench B** ([`output/plots/vstar/B_modality_mix.png`](../../output/plots/vstar/B_modality_mix.png))
+
+| Policy | mean_text_requests | mean_visual_requests | mean_wasted |
+|---|---:|---:|---:|
+| zero_info | 0.00 | 0.00 | 0.00 |
+| b=2 model | **0.00** | 1.87 | 0.05 |
+| b=4 model | **0.00** | 3.41 | 0.17 |
+| always_visual b=4 | 0.00 | 4.00 | 0.00 |
+| full_info | 0.00 | 4.00 | 0.00 |
+
+ScienceQA's `main_b6` showed mean text 3.28 / visual 0.87 (text preferred 3.8×). Same model on V*Bench: mean text **0.00** / visual 1.87–3.41 — **the default-text bias has vanished**.
+
+Interpretation:
+- text is nominally in the modality vocabulary but factually 0 hints exist → the model learns immediately from the first wasted action
+- mean_wasted of 0.05–0.17 is just 1–2 samples trying once and stopping → fast convergence
+- ScienceQA's text bias was a **rational response to the fact that text is a sentence-level lecture** that actually carries information. V*Bench has no such trigger, so the model immediately switches to visual-only mode
+
+→ Refines ⑩: **modality bias only happens when both modalities are meaningfully present**. In a domain where one is empty, the model adapts to ignore the empty side. Important for paper generalization: the text bias seen on ScienceQA is a **dataset effect** stemming from ScienceQA's text-rich nature, not a fundamental model flaw.
+
+---
+
+## ⑳ V*Bench zero_info = 0.120 (1/4.7× ScienceQA's 0.562) — a genuine vision-only QA
+
+V*Bench is constructed as a visual-search task that cannot be solved without the image. Zero-info accuracy of 0.120 (literally lower than the 25% random baseline of a 4-option MCQ) is the evidence.
+
+| benchmark | zero_info acc | full_info acc | floor-ceiling gap |
+|---|---:|---:|---:|
+| ScienceQA | 0.562 | 0.700 | 14pp |
+| V*Bench | 0.120 | 0.382 | 26pp |
+
+V*Bench gives +26pp of headroom from the image alone (ScienceQA gives only +14pp). That makes **V*Bench an essentially-image-informative dataset** — and the natural fix to Phase 1c's ⑯ caveat ("ScienceQA's image-masking isn't a decisive sufficiency test"). An image-masked V*Bench variant should be the proper sufficiency test: when the 4 tiles are masked, accuracy is strongly predicted to fall toward zero_info's 0.120. This is the prime candidate experiment for backlog I15.
+
+Also: the topic-level zero_info breakdown — direct_attributes 0.07 (below random; attribute questions are not guessable), relative_position 0.20 (close to random; binary patterns like "left or right" are statistically guessable). When information is absent, the model has only the **surface pattern of the question text** to lean on.
+
+---
+
 ## Limitations and caveats
 
 - **Single model**: only Qwen2.5-VL-7B evaluated. Modality bias may depend on the model's fine-tuning regime — LLaVA / InternVL could differ.
