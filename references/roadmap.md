@@ -2,20 +2,21 @@
 
 > A living progress-tracking document. **The paper-scope plan lives in [`project_ko.md`](./project_ko.md)** (near-immutable reference); this document tracks how far we've come relative to that plan + next unit of work + insight-mining actions. Updated whenever there is a meaningful change.
 
-Last updated: 2026-04-25 (Phase 1a + 1b + 1c + 1d complete)
+Last updated: 2026-04-25 (Phase 1 complete + Phase 2.0 V*Bench baseline complete)
 
 ---
 
 ## 0. One-line summary
 
-Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) + Phase 1d (anti-calibration curve + masking) from `project.md` **are all complete**. 6-action / SFT+GRPO / Pareto training is still at 0%. Next steps are **Phase 2 (expand action space to 6 + introduce V*Bench/HR-Bench) → Phase 3 (SFT data pipeline) → Phase 4 (GRPO training)**.
+Phase 0 (diagnostic baseline) + Phase 1a–d (calibration / difficulty / abstention / anti-calibration & masking) + Phase 2.0 (V*Bench introduction + 3-action baseline) from `project.md` **are complete**. 6-action vocab expansion / SFT+GRPO / Pareto training is still at 0%. Next steps are **Phase 2.1+ (6-action vocab introduction) → Phase 3 (SFT data pipeline) → Phase 4 (GRPO training)**.
 
-Phase 1 uncovered a total of **12 additional insights** (INSIGHTS ⑤–⑯). The four strongest as paper motivation:
+Phase 1+2.0 uncovered a total of **16 additional insights** (INSIGHTS ⑤–⑳). The five strongest as paper motivation:
 
 - **⑧**: The model requests almost the same amount of information across the zi_correct / zi_wrong cohorts (4.06 vs 4.33 at b=6) — it fails to recognize "I already know this".
 - **⑪**: The budget-accuracy curves for zi_correct and zi_wrong cross exactly at b=1 — on easy samples information hurts, on hard samples information helps. This is the mechanism behind the macro plateau (the 0.700 ceiling).
 - **⑭**: At b=6, vanilla abstention is **anti-calibrated** (zi_correct abstains 12.1% > zi_wrong 7.3%) — direct evidence that abstention is available but, without training, goes in the wrong direction.
 - **⑮**: The calibration → anti-calibration **flip happens exactly at b=3**, the same location as the macro dip in ④ → both phenomena share one mechanism. The strongest single-figure quantitative justification for designing budget-conditioning and abstention reward **together** in the paper.
+- **⑱** (Phase 2.0): V*Bench `relative_position` peaks at b=2 (0.45) and dips at full_info (0.21), **−24pp**. The non-monotonicity of ④ is amplified for spatial reasoning — direct quantitative justification for the paper's `ZOOM(bbox)` action (Phase 2b). Together with ⑰ (adaptive > brute-force on V*Bench, reverse of ScienceQA ①) gives multi-domain generalization evidence.
 
 ---
 
@@ -94,15 +95,16 @@ Each phase is an independent deliverable. Phase 1 can proceed without training, 
 
 **Goal**: Lay down the plan's 6-action vocab in an **inference-only** form first. If the new actions "exist" but the vanilla model fails to use them well, that itself is more motivation.
 
-- [ ] **2a. Officially introduce the `ABSTAIN` action** — terminates at cost 0 on any task
-- [ ] **2b. `ZOOM(bbox)` action** — propose bbox candidates via Qwen2.5-VL's native grounding → add the cropped tile as input. Account for token cost.
+- [ ] **2a. Officially introduce the `ABSTAIN` action** — terminates at cost 0 on any task (already implemented in Phase 1c, mostly a docs task)
+- [ ] **2b. `ZOOM(bbox)` action** — propose bbox candidates via Qwen2.5-VL's native grounding → add the cropped tile as input. Account for token cost. Direct motivation: ⑱ relative_position case.
 - [ ] **2c. `REQUEST_HI_RES` action** — start with ¼-res input, tokens ↑ on full-res request
 - [ ] **2d. `THINK(text)` action** — one free-form CoT segment, counted in output-token cost
 - [ ] **2e. Cost-model refactor** — uniform-1 → token-based deterministic. Vision tokens = `floor(H'·W'·grid_factor)`, computed exactly.
-- [ ] **2f. One new benchmark** — V*Bench OR HR-Bench 4K (a domain where a high-res zoom action pays off)
-- [ ] **2g. 6-action vanilla baseline re-measurement** — re-run budget sweep under the new action vocab. Same as the plan's baseline (1) "vanilla budget forcing".
+- [x] **2f. One new benchmark** ✅ 2026-04-25 — V*Bench (191 samples, 115 direct_attributes + 76 relative_position) introduced. `preprocessing_vstar.py` + `preproc_vstar/`. Added a `max_pixels` flag to `budget_eval.py` (high-res ergonomics, caps vision-token count on shared GPUs).
+- [x] **2g. 3-action vanilla baseline (V*Bench, 5 runs)** ✅ 2026-04-25 — `run_vstar_baseline.py` (zero_info / b=2 / b=4 / always_visual_b4 / full_info) + `analyze_vstar.py`. Adds INSIGHTS ⑰–⑳. Headlines: ⑰ adaptive (b=4: 0.440) beats always_visual (0.387) → ScienceQA ① reverse, ⑱ relative_position peaks at b=2 / dips at full_info −24pp → ④'s non-monotonicity amplified for spatial reasoning, ⑲ text request count = 0 (model recognises absent modality immediately), ⑳ V*Bench zero_info 0.120 = a genuine vision-only QA.
+- [ ] **2h. 6-action unified baseline re-measurement** — re-run on V*Bench with the 6-action vocab. Measure how the new actions are used by the vanilla model.
 
-**Exit criterion**: 6-action interface is stabilized, sample-level predictions land on the new benchmark.
+**Exit criterion**: 6-action interface stabilized, sample-level predictions on V*Bench under the 6-action vocab. **Phase 2.0 (V*Bench introduction + 3-action baseline) complete** — 2a–2e + 2h remaining.
 
 ### Phase 3 — SFT data pipeline (1 week)
 
@@ -179,19 +181,21 @@ Not a separate phase, but things to keep rolling throughout to generate insights
 
 ## 7. Next unit of work (now-doing)
 
-Phase 1 is fully closed. Next: **start Phase 2 — 6-action vocab expansion + introduction of V*Bench / HR-Bench**.
+Phase 2.0 (V*Bench introduction + 3-action baseline) complete. Candidate next steps in order:
 
-Recommended order:
-1. **2f. Introduce one new benchmark** — V*Bench (high-res detail detection) OR HR-Bench 4K. Data download + preprocessing + 3-action vanilla baseline first.
-2. **2g. 6-action vanilla baseline (current vocab)** — budget sweep on the new benchmark. Confirm whether the b=3 dip in ④ / anti-calibration in ⑭ generalize off ScienceQA — addresses backlog I9 / I12 / I15 simultaneously.
-3. **2a–2d. Add actions**: ABSTAIN (already there) → ZOOM(bbox) (use Qwen2.5-VL native grounding) → REQUEST_HI_RES → THINK
-4. **2e. Cost-model refactor** — uniform-1 → token-based deterministic.
+**Phase 2.1 — V*Bench abstention (decisive I15, ~1h)**: turn on ABSTAIN with the current 3-action vocab on V*Bench, plus a masked variant. Hypothesis: ⑳ V*Bench is image-required → masking all four tiles is genuinely unanswerable → measure how the ⑭ / ⑮ anti-calibration responds to true sufficiency. The decisive evidence for the paper's sufficiency-conditional abstention claim.
 
-Total Phase 2 time: ~1–1.5 weeks. Core artifact: stable 6-action interface + sample-level predictions on V*Bench or HR-Bench. Phase 3 SFT-data synthesis can then use the new benchmark's correct trajectories.
+**Phase 2.2 — Introduce `ZOOM(bbox)` action (2b)**: ⑱ is the direct motivation. Lets the model select a single crop that covers two objects in relative_position questions. Use Qwen2.5-VL's native grounding for bbox candidates. ~1–2 days.
+
+**Phase 2.3 — Cost-model refactor + `REQUEST_HI_RES` (2c, 2e)**: token-based cost. Start at ¼-res, request full-res.
+
+Recommended order: **2.1 → 2.2 → 2.3**. 2.1 is the direct sequel to Phase 1d, so the paper narrative stays smooth, and we lock in the answer to "how does vanilla abstention react to genuine sufficiency?" before introducing ZOOM. ⑱ then becomes the natural prescription that motivates 2.2.
 
 Open backlog handled in parallel during Phase 2:
-- **I9, I12, I15**: Whether ⑧ / ⑪ / ⑭ / ⑮ reproduce on the new benchmark → strengthens the paper's generalization evidence.
-- **I7**: Whether the same diagnostics reproduce on a second VLM (LLaVA-OneVision-7B or InternVL2.5-8B).
+- **I9 ✅ partial** (Phase 2.0): on V*Bench, ⑩ generalization is verified — the text bias is a multimodal-domain artifact (⑲).
+- **I12 ✅ partial** (Phase 2.0): the V*Bench cohort breakdown reproduces part of the "more info hurts easy" pattern (zi_correct n=23 is small).
+- **I15**: the decisive test is planned for Phase 2.1.
+- **I7**: reproducing ⑤–⑳ on a second VLM (LLaVA-OneVision-7B or InternVL2.5-8B) is deferred to a Phase 5 sanity step.
 
 ---
 
@@ -204,3 +208,4 @@ Open backlog handled in parallel during Phase 2:
 | 2026-04-24 | Phase 1b complete. Added `analyze_difficulty.py`; cohort curves + modality mix + subject crosstab + delta-from-b1 produced. INSIGHTS ⑩–⑫ added (especially ⑪ cross-over at b=1, a paper-figure candidate). |
 | 2026-04-24 | Phase 1c complete (scope-cut noted). Added `enable_abstain` + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` to `budget_eval.py`. New: `run_abstention.py` + `analyze_abstention.py`. Ran `abstain_b0` + `abstain_b6` at 500 samples. INSIGHTS ⑬–⑭ added — ⑭ anti-calibration is direct evidence for the necessity of budget-conditional training. Sufficiency-known mini-set deferred to backlog I13. Five headline figures copied to `docs/figures/`. Committed Phase 1a+1b+1c as a bundle. |
 | 2026-04-25 | Phase 1d complete. New: `run_abstention_sweep.py` (8 additional abstain runs at b=1..5,7,8,10) + `preprocessing_masked.py` (100-sample image-masked variant under `preproc_masked/`) + `run_abstention_masked.py` (b=0/4/6 on the masked set) + `analyze_abstention_phase1d.py`. Findings: I13 (sufficiency-known masking, ⑯) and I14 (anti-calibration curve, ⑮). **⑮ The flip is exactly at b=3, the same location as ④'s macro dip** — strongest single-figure paper motivation candidate. ⑯ Δ ≤ 2pp under masking → vanilla abstention is image-blind. Two new headline plots copied to `docs/figures/abstention_phase1d_*.png`. New backlog I15 (the decisive sufficiency test moves to V*Bench / HR-Bench). |
+| 2026-04-25 | Phase 2.0 (V*Bench introduction + 3-action vanilla baseline) complete. New: `preprocessing_vstar.py` (191 samples, 115 direct_attributes + 76 relative_position) + `run_vstar_baseline.py` (5 runs: zero_info / b=2 / b=4 / always_visual_b4 / full_info) + `analyze_vstar.py`. Added a `max_pixels` flag to `budget_eval.py` (cope with shared-GPU memory). Adds INSIGHTS ⑰–⑳. Headlines: ⑰ adaptive (b=4: 0.440) beats always_visual (0.387) → reverses ScienceQA ①, ⑱ relative_position non-monotone (b=2 0.45 peak → full_info 0.21 dip), ⑲ text request count = 0 (model recognises absent modality), ⑳ V*Bench zero_info 0.120 = a genuine vision-only QA. Two new headline plots copied to `docs/figures/vstar_*.png`. Backlog I9 / I12 / I15 partially closed. |

@@ -2,20 +2,21 @@
 
 > 살아 있는 진행 추적 문서. **paper-scope 계획은 [`project_ko.md`](./project_ko.md)** (변경 금지에 가까운 reference), 이 문서는 그 계획 대비 현재 어디까지 왔는지 + 다음 단위 작업 + 인사이트 발굴 액션을 정리한다. 의미 있는 변화가 있을 때마다 업데이트.
 
-마지막 업데이트: 2026-04-25 (Phase 1a + 1b + 1c + 1d 완료)
+마지막 업데이트: 2026-04-25 (Phase 1 완료 + Phase 2.0 V*Bench baseline 완료)
 
 ---
 
 ## 0. 한 줄 요약
 
-`project_ko.md`의 Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) + Phase 1d (anti-calibration 곡선 + masking) **모두 완료**. 6-action / SFT+GRPO / Pareto 학습은 아직 0%. 다음 단계는 **Phase 2 (action space 6개로 확장 + V*Bench/HR-Bench 도입) → Phase 3 (SFT 데이터 파이프라인) → Phase 4 (GRPO 학습)**.
+`project_ko.md`의 Phase 0 (diagnostic baseline) + Phase 1a–d (calibration / difficulty / abstention / anti-calibration & masking) + Phase 2.0 (V*Bench 도입 + 3-action baseline) **완료**. 6-action vocab 확장 / SFT+GRPO / Pareto 학습은 아직 0%. 다음 단계는 **Phase 2.1+ (6-action vocab 도입) → Phase 3 (SFT 데이터 파이프라인) → Phase 4 (GRPO 학습)**.
 
-Phase 1에서 총 **12개 추가 인사이트 발굴** (INSIGHTS ⑤–⑯). paper motivation으로 가장 강한 4가지:
+Phase 1+2.0에서 총 **16개 추가 인사이트 발굴** (INSIGHTS ⑤–⑳). paper motivation으로 가장 강한 5가지:
 
 - **⑧**: 모델은 zi_correct/zi_wrong 코호트에 거의 같은 양의 정보를 요청 (b=6에서 4.06 vs 4.33) — "내가 안다"를 인지 못 함.
 - **⑪**: budget-accuracy 곡선이 zi_correct와 zi_wrong에서 b=1에서 정확히 교차 — 쉬운 샘플은 정보가 망치고, 어려운 샘플은 정보가 살림. 매크로 plateau(0.700 ceiling)의 메커니즘.
 - **⑭**: b=6에서 vanilla abstention은 **anti-calibrated** (zi_correct 12.1% abstain > zi_wrong 7.3%) — training 없이는 방향까지 거꾸로 간다는 직접 증거.
 - **⑮**: Calibration → anti-calibration **flip이 정확히 b=3에서 일어남**, ④ macro dip과 같은 위치 → 두 phenomenon 한 메커니즘. paper의 budget-conditional + abstention reward를 **함께** 설계해야 한다는 가장 단단한 정량적 근거.
+- **⑱** (Phase 2.0): V*Bench `relative_position`이 b=2 peak (0.45) → full_info dip (0.21) **−24pp**. ④의 비단조성이 spatial reasoning에서 극대화 — paper의 ZOOM(bbox) action(2b) 정당화의 직접 증거. ⑰(adaptive > brute-force on V*Bench, ScienceQA ① reverse)와 함께 multi-domain 일반화 evidence.
 
 ---
 
@@ -94,15 +95,16 @@ Phase 1에서 총 **12개 추가 인사이트 발굴** (INSIGHTS ⑤–⑯). pap
 
 **목표**: 계획서의 6-action vocab을 **inference-only**로 먼저 깔아둔다. 새 action들이 "있어도" vanilla 모델이 잘 못 쓴다는 걸 보이면 그것 자체로 또 motivation.
 
-- [ ] **2a. `ABSTAIN` action 정식 도입** — 모든 task에서 cost 0으로 종료
-- [ ] **2b. `ZOOM(bbox)` action** — Qwen2.5-VL native grounding으로 bbox 후보 제안 → crop tile 추가 입력. 토큰 비용 산정.
+- [ ] **2a. `ABSTAIN` action 정식 도입** — 모든 task에서 cost 0으로 종료 (Phase 1c에서 이미 구현, 도큐먼테이션만 정리하면 됨)
+- [ ] **2b. `ZOOM(bbox)` action** — Qwen2.5-VL native grounding으로 bbox 후보 제안 → crop tile 추가 입력. 토큰 비용 산정. ⑱ relative_position 케이스가 직접적 motivation.
 - [ ] **2c. `REQUEST_HI_RES` action** — 초기 입력을 ¼-res로 시작, full-res 요청 시 토큰 ↑
 - [ ] **2d. `THINK(text)` action** — free-form CoT 한 segment, output token cost로 카운트
 - [ ] **2e. Cost model 리팩터** — uniform-1 → token-based deterministic. 비전 token = `floor(H'·W'·grid_factor)` 정확히 계산.
-- [ ] **2f. New benchmark 1종** — V*Bench OR HR-Bench 4K (high-res zoom action이 효과적인 도메인)
-- [ ] **2g. 6-action vanilla baseline 재측정** — 새 action vocab으로 budget sweep 재실행. 계획서의 baseline (1) "vanilla budget forcing"과 동일.
+- [x] **2f. New benchmark 1종** ✅ 2026-04-25 — V*Bench (191 sample, 115 direct_attributes + 76 relative_position) 도입. `preprocessing_vstar.py` + `preproc_vstar/`. `budget_eval.py`에 `max_pixels` flag 추가 (high-res ergonomics, shared-GPU 환경에서 vision token 캡).
+- [x] **2g. 3-action vanilla baseline (V*Bench, 5 runs)** ✅ 2026-04-25 — `run_vstar_baseline.py` (zero_info / b=2 / b=4 / always_visual_b4 / full_info) + `analyze_vstar.py`. INSIGHTS ⑰–⑳ 추가. 핵심: ⑰ 모델 adaptive (b=4: 0.440)이 always_visual (0.387) 능가 → ScienceQA의 ① reverse, ⑱ relative_position이 b=2에서 peak / full_info에서 dip −24pp → ④ 비단조성이 spatial reasoning에서 극대화, ⑲ text request 0회 (text 없는 도메인이면 default text 편향 즉시 사라짐), ⑳ V*Bench zero_info 0.120 = 진짜 vision-only QA.
+- [ ] **2h. 6-action 통합 baseline 재측정** — 6-action vocab으로 V*Bench 한 번 더. 새 action들이 vanilla 모델에서 어떻게 쓰이는지 측정.
 
-**Exit criterion**: 6-action 인터페이스 안정화, 새 벤치마크 1종에서 sample-level prediction 떨어짐.
+**Exit criterion**: 6-action 인터페이스 안정화, V*Bench에서 6-action sample-level prediction. **2.0 (V*Bench 도입 + 3-action baseline) 완료** — 2a–2e + 2h가 남은 Phase 2 작업.
 
 ### Phase 3 — SFT 데이터 파이프라인 (1주)
 
@@ -179,19 +181,21 @@ Phase 1에서 총 **12개 추가 인사이트 발굴** (INSIGHTS ⑤–⑯). pap
 
 ## 7. 다음 단위 작업 (now-doing)
 
-Phase 1 완전 종료. 다음은 **Phase 2 시작 — 6-action vocab 확장 + V*Bench/HR-Bench 도입**.
+Phase 2.0 (V*Bench 도입 + 3-action baseline) 완료. 다음 후보 순서:
 
-권장 순서:
-1. **2f. New benchmark 1종 도입** — V*Bench (high-res detail detection) OR HR-Bench 4K. 데이터 다운로드 + 전처리 + 3-action vanilla baseline 먼저.
-2. **2g. 6-action vanilla baseline (현 vocab)** — 새 벤치마크에서 budget sweep. 현재 ScienceQA의 ④ b=3 dip / ⑭ anti-calibration 이 일반화되는지 확인 — I9/I12/I15 backlog 동시 해결 가능.
-3. **2a–2d. Action 추가**: ABSTAIN (이미 있음) → ZOOM(bbox) (Qwen2.5-VL native grounding 활용) → REQUEST_HI_RES → THINK
-4. **2e. Cost model 리팩터** — uniform-1 → token-based deterministic.
+**Phase 2.1 — V*Bench abstention 측정 (I15 결정판, 1h)**: 현 3-action vocab + ABSTAIN을 V*Bench에서 sweep + masked 변형. 가설: ⑳ V*Bench는 image-required → 4 tile masking이 진짜 unanswerable → ⑭/⑮ anti-calibration이 진짜 sufficiency 환경에서 어떻게 나오는지 직접 측정. paper의 sufficiency-conditional abstention 주장 결정적 근거.
 
-전체 Phase 2 시간: 1–1.5주 추정. 핵심 산출: 6-action 인터페이스 안정화 + V*Bench 또는 HR-Bench에서 sample-level prediction. Phase 3 SFT 데이터 합성에 새 benchmark 정답 trajectory를 쓸 수 있게 됨.
+**Phase 2.2 — ZOOM(bbox) action 도입 (2b)**: ⑱이 직접 motivation. relative_position에서 모델이 두 객체를 한 crop에서 비교 가능하도록. Qwen2.5-VL native grounding으로 bbox 후보 제안. ~1-2일.
+
+**Phase 2.3 — Cost model 리팩터 + REQUEST_HI_RES (2c, 2e)**: token-based cost. ¼-res로 시작해서 full-res 요청.
+
+권장 순서: **2.1 → 2.2 → 2.3**. 2.1은 Phase 1d 직접 후속이라 paper narrative 매끄럽고, ZOOM 도입 전에 "vanilla abstention이 진짜 sufficiency에 어떻게 반응하는가" 답을 확보. ⑱이 ZOOM의 자연스러운 처방이 되어 2.2로 이어짐.
 
 미해결 backlog (Phase 2 진행 중 동시 처리):
-- **I9, I12, I15**: 새 벤치마크에서 ⑧/⑪/⑭/⑮ 재현 여부 → paper 일반화 evidence 강화
-- **I7**: 두 번째 VLM (LLaVA-OneVision-7B 또는 InternVL2.5-8B)에서도 같은 진단 재현되는지
+- **I9 ✅ partial** (Phase 2.0): V*Bench에서 ⑩ 일반화 검증 — text 편향이 multimodal-domain artifact임 확인 (⑲).
+- **I12 ✅ partial** (Phase 2.0): V*Bench cohort breakdown으로 "more info hurts easy" 패턴 일부 재현 (zi_correct n=23 too small).
+- **I15** Phase 2.1에서 결정적 테스트 예정.
+- **I7**: 두 번째 VLM (LLaVA-OneVision-7B 또는 InternVL2.5-8B)에서 ⑤–⑳ 재현. Phase 5 sanity로 이월.
 
 ---
 
@@ -204,3 +208,4 @@ Phase 1 완전 종료. 다음은 **Phase 2 시작 — 6-action vocab 확장 + V*
 | 2026-04-24 | Phase 1b 완료. `analyze_difficulty.py` 추가, cohort curve + modality mix + subject crosstab + delta-from-b1 산출. INSIGHTS ⑩–⑫ 추가 (특히 ⑪ cross-over at b=1은 paper figure 후보). |
 | 2026-04-24 | Phase 1c 완료 (scope-cut noted). `budget_eval.py`에 `enable_abstain` + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` 추가. `run_abstention.py` + `analyze_abstention.py` 신규. `abstain_b0` + `abstain_b6` 500샘플 실행. INSIGHTS ⑬–⑭ 추가 — ⑭ anti-calibration 이 budget-conditional training 필요성의 직접 증거. sufficiency-known mini-set은 backlog I13으로 이월. 헤드라인 figure 5장 `docs/figures/`로 복사. Phase 1a+1b+1c 번들로 commit. |
 | 2026-04-25 | Phase 1d 완료. `run_abstention_sweep.py` (b=1..5,7,8,10 추가 abstain 8 run) + `preprocessing_masked.py` (100샘플 image-masked 변형) + `run_abstention_masked.py` (b=0/4/6 masked) + `analyze_abstention_phase1d.py` 신규. I13(sufficiency-known masking, ⑯) + I14(anti-calibration 곡선, ⑮) 발견. **⑮ flip이 정확히 b=3 = ④ macro dip 위치** — paper의 가장 단단한 single-figure motivation 후보. ⑯ 마스킹 Δ ≤ 2pp → vanilla abstention image-blind. 헤드라인 plot 2장 `docs/figures/abstention_phase1d_*.png` 추가. backlog I15 신규 (decisive sufficiency 테스트는 V*Bench/HR-Bench로 이월). |
+| 2026-04-25 | Phase 2.0 (V*Bench 도입 + 3-action vanilla baseline) 완료. `preprocessing_vstar.py` (191 sample, 115 direct_attributes + 76 relative_position) + `run_vstar_baseline.py` (5 runs: zero_info/b=2/b=4/always_visual_b4/full_info) + `analyze_vstar.py` 신규. `budget_eval.py`에 `max_pixels` flag 추가 (shared GPU 환경 대응). INSIGHTS ⑰–⑳ 추가. 핵심: ⑰ 모델 adaptive (b=4: 0.440)이 always_visual (0.387) 능가 → ScienceQA ① reverse, ⑱ relative_position 비단조 (b=2 0.45 peak → full_info 0.21 dip), ⑲ text request 0회 (modality 부재 빨리 인지), ⑳ V*Bench zero_info 0.120 = vision-only QA. 헤드라인 plot 2장 `docs/figures/vstar_*.png` 추가. backlog I9/I12/I15 partial 진행. |

@@ -70,6 +70,11 @@ class EvalConfig:
     # cost 0, ends the episode without choosing. When enabled, the system prompt
     # describes the action and parse_action accepts it.
     enable_abstain: bool = False
+    # Phase 2.0 high-res ergonomics: cap each image to this many pixels at the
+    # processor level so per-tile vision-token count stays bounded on GPUs that
+    # are sharing memory. None = use the model's default (~12.8 Mpx for
+    # Qwen2.5-VL).
+    max_pixels: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -125,7 +130,10 @@ def load_model_and_processor(cfg: EvalConfig):
         trust_remote_code=True,
     )
     model.eval()
-    processor = AutoProcessor.from_pretrained(cfg.model_id, trust_remote_code=True)
+    proc_kwargs: Dict[str, Any] = {"trust_remote_code": True}
+    if cfg.max_pixels is not None:
+        proc_kwargs["max_pixels"] = int(cfg.max_pixels)
+    processor = AutoProcessor.from_pretrained(cfg.model_id, **proc_kwargs)
     return model, processor
 
 

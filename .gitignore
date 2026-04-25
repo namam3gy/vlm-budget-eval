@@ -218,5 +218,6 @@ __marimo__/
 # Project-specific: large generated artifacts
 preproc/
 preproc_masked/
+preproc_vstar/
 output/
 output2/
