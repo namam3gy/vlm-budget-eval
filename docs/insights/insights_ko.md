@@ -414,6 +414,65 @@ zi_correct/zi_wrong 코호트별 abstain rate:
 
 ---
 
+## ⑮ Calibration → anti-calibration flip이 정확히 b=3에서 일어남 — ④의 macro dip과 같은 위치
+
+**Phase 1d / I14** ([`output/abstention_phase1d/I14_cohort_x_budget.csv`](../../output/abstention_phase1d/I14_cohort_x_budget.csv), 그림: [`docs/figures/abstention_phase1d_I14_cohort_x_budget.png`](../figures/abstention_phase1d_I14_cohort_x_budget.png))
+
+⑭에서는 b=0과 b=6 두 점만 비교했지만, 이번엔 b=1..5,7,8,10을 추가 측정해서 **abstain rate가 cohort별로 budget에 따라 어떻게 진화하는지** 풀 곡선을 그렸다.
+
+| budget | zi_correct abstain | zi_wrong abstain | direction |
+|---:|---:|---:|---|
+| 0 | 0.829 | **0.945** | calibrated (zi_wrong > zi_correct) |
+| 1 | 0.544 | **0.817** | calibrated (+27.3pp) |
+| 2 | 0.320 | **0.397** | calibrated (+7.7pp) |
+| **3** | **0.157** | 0.137 | **flipped** (−2.0pp) |
+| 4 | **0.146** | 0.114 | anti-calibrated (−3.2pp) |
+| 5 | **0.125** | 0.087 | anti-calibrated (−3.8pp) |
+| 6 | **0.121** | 0.073 | anti-calibrated (−4.8pp) |
+| 7 | **0.114** | 0.082 | anti-calibrated (−3.2pp) |
+| 8 | **0.114** | 0.078 | anti-calibrated (−3.6pp) |
+| 10 | **0.110** | 0.041 | strongly anti-calibrated (**−6.9pp**) |
+
+**핵심**: sign flip은 점진적이 아니라 **b=2와 b=3 사이에서 단번에 일어나고, 그 이후로는 안 돌아온다**. b≤2에서는 모델이 어려운 샘플(zi_wrong)에 더 자주 abstain → calibrated. b≥3부터는 zi_correct에서 더 자주 abstain → anti-calibrated 영구 유지, 게다가 b=10에서 격차 −6.9pp까지 벌어짐.
+
+이 b=3 transition은 ④에서 본 **macro budget curve의 b=3 dip**과 정확히 같은 위치다. 두 현상이 같은 메커니즘을 공유한다는 강한 시사:
+- b≤2에서 모델은 "정보 부족"을 진심으로 인지 → 어려운 샘플에 abstain, 쉬운 샘플엔 답.
+- b=3을 기점으로 모델이 "이 정도면 답해야 한다"고 판단 → 어려운 샘플에서도 잘못된 답을 내고, 오히려 쉬운 샘플에서 가끔 abstain하는 (anti-)calibration 패턴 발생.
+- macro 곡선이 b=3에서 dip하는 이유: 어려운 샘플에서 abstain → 잘못된 답으로 전환 (정답률 ↓), 동시에 쉬운 샘플에선 일부가 abstain로 빠짐 (역시 정답률 ↓).
+
+→ 두 phenomenon이 한 figure로 정리됨. 학습 시 budget-conditioning과 abstention reward를 **함께** 설계해야 하는 구체적 근거 (paper Phase 4 GRPO setup의 `λ_cost`와 `λ_abs`/`λ_cal`이 분리되면 안 되는 이유).
+
+---
+
+## ⑯ 이미지 마스킹해도 abstain rate 거의 안 변함 (Δ ≤ 2pp) — vanilla abstention은 image-level sufficiency-blind
+
+**Phase 1d / I13** ([`output/abstention_phase1d/I13_masked_vs_unmasked.csv`](../../output/abstention_phase1d/I13_masked_vs_unmasked.csv), 그림: [`docs/figures/abstention_phase1d_I13_masked_vs_unmasked.png`](../figures/abstention_phase1d_I13_masked_vs_unmasked.png))
+
+⑭의 anti-calibration이 "모델이 image content에 대한 sufficiency를 정말 못 본다"인지 직접 테스트하려고, ScienceQA에서 100개(50 zi_correct + 50 zi_wrong, seed 42)를 골라 **4개 타일 모두 white(255,255,255)로 대체**한 변형(`preproc_masked/`)을 만들고 같은 b=0/4/6에서 abstain 행동을 비교.
+
+| budget | cohort | unmasked abstain | masked abstain | Δ |
+|---:|---|---:|---:|---:|
+| 0 | zi_correct | 0.74 | 0.74 | **0.00** |
+| 0 | zi_wrong | 0.96 | 0.96 | **0.00** |
+| 4 | zi_correct | 0.12 | 0.14 | +0.02 |
+| 4 | zi_wrong | 0.20 | 0.20 | **0.00** |
+| 6 | zi_correct | 0.10 | 0.10 | **0.00** |
+| 6 | zi_wrong | 0.10 | 0.12 | +0.02 |
+
+**모든 셀에서 Δ ≤ 2pp** — 50개 코호트 기준 1 샘플 차이 = noise 수준. 모델은 4개 타일이 전부 white라는 사실을 **abstention 결정에 거의 반영하지 않는다**.
+
+게다가 정확도(naive accuracy)도 마스킹해도 거의 떨어지지 않음 (b=4 zi_correct 0.84→0.82, b=6 zi_correct 0.86→0.84, b=6 zi_wrong 0.24→0.24). 두 가능성:
+1. **ScienceQA text(hint+lecture)만으로 답이 충분히 derivable** — 이미지가 명목상으로만 있고 실질적으로는 redundant인 케이스가 많음.
+2. **모델이 white tile을 "정보 없음"이 아닌 "image as usual"로 처리** — visual encoder가 white를 의미 있는 픽셀로 받고, 모델은 sufficiency를 이미지 content가 아니라 텍스트 confidence에서만 본다.
+
+두 효과가 섞여서 결정적 분리는 못 하지만, 적어도 **vanilla abstention은 image-level sufficiency를 추적하지 않는다**는 결론은 안전하다 (추적했다면 zi_wrong 코호트의 마스킹된 케이스에서 abstain rate ↑가 보여야 함).
+
+**Caveat**: 100 샘플은 작음 (cohort당 50 → 95% CI ±~14%). 그리고 ScienceQA는 image-required-by-construction 벤치마크가 아님. **결정적 sufficiency 테스트**는 V\*Bench / HR-Bench(이미지가 답에 필수) + image-masked 변형으로 재실행 — ROADMAP backlog I15로 등록(Phase 2 초반).
+
+→ ⑮(b=3에서 flip)와 ⑯(image-blind)을 합치면 그림이 단단해짐: vanilla abstention은 image content가 아니라 **text-based confidence**만 본다, 그리고 그 confidence는 b=3을 기점으로 잘못 calibrated되기 시작. R-Tuning / GRPO 학습은 이 두 결함을 모두 해결해야 함.
+
+---
+
 ## 한계와 caveats
 
 - **단일 모델**: Qwen2.5-VL-7B만 평가. 모달리티 편향이 모델 fine-tuning 패턴에 종속될 가능성 — LLaVA/InternVL은 다를 수 있음.

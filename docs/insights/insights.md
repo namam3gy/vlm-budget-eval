@@ -414,6 +414,65 @@ Abstain rate by zi_correct / zi_wrong cohort:
 
 ---
 
+## ⑮ The calibration → anti-calibration flip happens exactly at b=3 — same location as the macro dip in ④
+
+**Phase 1d / I14** ([`output/abstention_phase1d/I14_cohort_x_budget.csv`](../../output/abstention_phase1d/I14_cohort_x_budget.csv), figure: [`docs/figures/abstention_phase1d_I14_cohort_x_budget.png`](../figures/abstention_phase1d_I14_cohort_x_budget.png))
+
+⑭ compared only b=0 and b=6. Adding b=1..5,7,8,10 yields the full curve of **how abstain rate evolves per cohort across budgets**.
+
+| budget | zi_correct abstain | zi_wrong abstain | direction |
+|---:|---:|---:|---|
+| 0 | 0.829 | **0.945** | calibrated (zi_wrong > zi_correct) |
+| 1 | 0.544 | **0.817** | calibrated (+27.3pp) |
+| 2 | 0.320 | **0.397** | calibrated (+7.7pp) |
+| **3** | **0.157** | 0.137 | **flipped** (−2.0pp) |
+| 4 | **0.146** | 0.114 | anti-calibrated (−3.2pp) |
+| 5 | **0.125** | 0.087 | anti-calibrated (−3.8pp) |
+| 6 | **0.121** | 0.073 | anti-calibrated (−4.8pp) |
+| 7 | **0.114** | 0.082 | anti-calibrated (−3.2pp) |
+| 8 | **0.114** | 0.078 | anti-calibrated (−3.6pp) |
+| 10 | **0.110** | 0.041 | strongly anti-calibrated (**−6.9pp**) |
+
+**Key**: the sign flip is not gradual — it happens **between b=2 and b=3 in one step and never reverts**. At b≤2 the model abstains more on hard samples (zi_wrong) → calibrated. From b=3 onwards it abstains more on zi_correct → permanent anti-calibration, with the gap widening to −6.9pp at b=10.
+
+This b=3 transition lines up exactly with the **b=3 dip in the macro budget curve** from ④. Strong indication that both phenomena share a mechanism:
+- At b≤2 the model genuinely registers "not enough information" → abstains on hard samples, answers the easy ones.
+- At b=3 the model decides "this much is enough to answer" → it produces wrong answers on the hard cohort and occasionally even abstains on easy ones, the (anti-)calibration pattern.
+- The macro b=3 dip happens because abstaining-then-answering on hard samples flips them to wrong (acc ↓), while a slice of easy samples leaks into the abstain bucket (acc ↓).
+
+→ Two phenomena resolve to a single figure. Concrete justification for designing budget-conditioning and abstention reward **together** during training (the reason the Phase-4 GRPO setup must not separate `λ_cost` from `λ_abs` / `λ_cal`).
+
+---
+
+## ⑯ Image masking barely changes the abstain rate (Δ ≤ 2pp) — vanilla abstention is image-level sufficiency-blind
+
+**Phase 1d / I13** ([`output/abstention_phase1d/I13_masked_vs_unmasked.csv`](../../output/abstention_phase1d/I13_masked_vs_unmasked.csv), figure: [`docs/figures/abstention_phase1d_I13_masked_vs_unmasked.png`](../figures/abstention_phase1d_I13_masked_vs_unmasked.png))
+
+To test directly whether ⑭'s anti-calibration is "the model genuinely cannot read sufficiency from image content", I picked 100 ScienceQA samples (50 zi_correct + 50 zi_wrong, seed 42), built a variant (`preproc_masked/`) where **all 4 tiles are replaced with white (255,255,255)**, and compared abstain behaviour at the same b=0/4/6.
+
+| budget | cohort | unmasked abstain | masked abstain | Δ |
+|---:|---|---:|---:|---:|
+| 0 | zi_correct | 0.74 | 0.74 | **0.00** |
+| 0 | zi_wrong | 0.96 | 0.96 | **0.00** |
+| 4 | zi_correct | 0.12 | 0.14 | +0.02 |
+| 4 | zi_wrong | 0.20 | 0.20 | **0.00** |
+| 6 | zi_correct | 0.10 | 0.10 | **0.00** |
+| 6 | zi_wrong | 0.10 | 0.12 | +0.02 |
+
+**Δ ≤ 2pp in every cell** — within a 50-sample cohort that is a single-sample difference, i.e. noise. The model **barely registers** that all four tiles are white when deciding to abstain.
+
+Naive accuracy is also nearly unchanged under masking (b=4 zi_correct 0.84→0.82, b=6 zi_correct 0.86→0.84, b=6 zi_wrong 0.24→0.24). Two possibilities:
+1. **ScienceQA text (hint+lecture) is enough to derive the answer in many cases** — the image is nominally present but practically redundant.
+2. **The model treats white tiles as "image as usual" rather than "no information"** — the visual encoder accepts white as meaningful pixels, and the model reads sufficiency from text confidence rather than image content.
+
+These two effects mix and we cannot fully separate them, but the conclusion that **vanilla abstention does not track image-level sufficiency** is safe (if it did, the masked zi_wrong cohort would show an abstain-rate spike).
+
+**Caveat**: 100 samples is small (per-cohort 50 → 95% CI ±~14%). And ScienceQA is not an image-required-by-construction benchmark. The **decisive sufficiency test** would re-run this on V\*Bench / HR-Bench (image is essential to the answer) + image-masked variants — registered in ROADMAP as backlog I15 (early Phase 2).
+
+→ ⑮ (flip at b=3) and ⑯ (image-blind) together tighten the picture: vanilla abstention reads **text-based confidence**, not image content, and that confidence becomes mis-calibrated starting at b=3. R-Tuning / GRPO training would have to fix both deficiencies.
+
+---
+
 ## Limitations and caveats
 
 - **Single model**: only Qwen2.5-VL-7B evaluated. Modality bias may depend on the model's fine-tuning regime — LLaVA / InternVL could differ.
