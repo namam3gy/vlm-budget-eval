@@ -2,19 +2,20 @@
 
 > A living progress-tracking document. **The paper-scope plan lives in [`project_ko.md`](./project_ko.md)** (near-immutable reference); this document tracks how far we've come relative to that plan + next unit of work + insight-mining actions. Updated whenever there is a meaningful change.
 
-Last updated: 2026-04-24 (Phase 1a + 1b + 1c complete)
+Last updated: 2026-04-25 (Phase 1a + 1b + 1c + 1d complete)
 
 ---
 
 ## 0. One-line summary
 
-Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) from `project_ko.md` are complete. 6-action / SFT+GRPO / Pareto training is still at 0%. Next steps are **Phase 2 (expand action space to 6) → Phase 3 (SFT data pipeline) → Phase 4 (GRPO training)**.
+Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) + Phase 1d (anti-calibration curve + masking) from `project.md` **are all complete**. 6-action / SFT+GRPO / Pareto training is still at 0%. Next steps are **Phase 2 (expand action space to 6 + introduce V*Bench/HR-Bench) → Phase 3 (SFT data pipeline) → Phase 4 (GRPO training)**.
 
-Phase 1 uncovered a total of **10 additional insights** (INSIGHTS ⑤–⑭). The three strongest as paper motivation:
+Phase 1 uncovered a total of **12 additional insights** (INSIGHTS ⑤–⑯). The four strongest as paper motivation:
 
 - **⑧**: The model requests almost the same amount of information across the zi_correct / zi_wrong cohorts (4.06 vs 4.33 at b=6) — it fails to recognize "I already know this".
 - **⑪**: The budget-accuracy curves for zi_correct and zi_wrong cross exactly at b=1 — on easy samples information hurts, on hard samples information helps. This is the mechanism behind the macro plateau (the 0.700 ceiling).
-- **⑭**: At b=6, vanilla abstention is **anti-calibrated** (zi_correct abstains 12.1% > zi_wrong 7.3%). Direct evidence that abstention is available but, without training, goes in the wrong direction → justifies Thread D of `research_plan` (R-Tuning / GRPO with abstention reward).
+- **⑭**: At b=6, vanilla abstention is **anti-calibrated** (zi_correct abstains 12.1% > zi_wrong 7.3%) — direct evidence that abstention is available but, without training, goes in the wrong direction.
+- **⑮**: The calibration → anti-calibration **flip happens exactly at b=3**, the same location as the macro dip in ④ → both phenomena share one mechanism. The strongest single-figure quantitative justification for designing budget-conditioning and abstention reward **together** in the paper.
 
 ---
 
@@ -84,12 +85,10 @@ Each phase is an independent deliverable. Phase 1 can proceed without training, 
 - [x] **1b. Difficulty stratification** ✅ 2026-04-24 — `analyze_difficulty.py` + `output/difficulty/`. Adds INSIGHTS ⑩–⑫. Headlines: ⑩ modality bias hurts only on zi_wrong (on zi_correct, always_text == always_visual at exactly 0.911), ⑪ the zi_correct and zi_wrong budget curves cross exactly at b=1 (clean cross-over), ⑫ natural science is high-volatility, social science is low-volatility — optimal budget differs by domain.
 - [x] **1c. Abstention proxy measurement** ✅ 2026-04-24 — Added an `enable_abstain` flag + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` to `budget_eval.py`. Ran `abstain_b0` / `abstain_b6` on 500 samples each via `run_abstention.py`. Produced four metrics (A summary, B cohort xtab, C Phi sweep, D cohort-aligned comparison) via `analyze_abstention.py`. Adds INSIGHTS ⑬–⑭. Headlines: ⑬ the "should I answer" signal nearly coincides with zero-info prior knowledge (selectivity only +3.3pp), ⑭ at b=6 vanilla abstention is **anti-calibrated** (zi_correct 12.1% > zi_wrong 7.3% abstain).
   - ⚠️ **Scope-cut**: The original MM-UPD subset / image-masked ScienceQA sufficiency-known mini-set is **skipped**. We use `zi_correct` / `zi_wrong` cohorts as a sufficiency proxy. Direct test on unanswerable-by-construction stimuli deferred to Phase 1d or the start of Phase 2 — see backlog I13 below.
-- [ ] **1d. Second VLM validation** (optional, time permitting)
-  - Run one of LLaVA-OneVision-7B or InternVL2.5-8B under the same 3-action protocol
-  - Separate whether the text bias is model-specific or task-driven
-  - Artifact: `output/secondary_vlm/` + comparison table
+- [x] **1d. Anti-calibration curve + sufficiency-known masking** ✅ 2026-04-25 — `run_abstention_sweep.py` ran abstain at b=1..5,7,8,10 (I14); `preprocessing_masked.py` built a 100-sample (50/50 cohort) image-masked variant under `preproc_masked/`, and `run_abstention_masked.py` ran abstain at b=0/4/6 on the masked set (I13); `analyze_abstention_phase1d.py` integrates both. Adds INSIGHTS ⑮–⑯. Headlines: ⑮ the calibration→anti-calibration **flip happens exactly at b=3**, same location as ④'s macro dip → both phenomena share one mechanism. ⑯ image masking changes abstain rate by Δ ≤ 2pp → vanilla abstention is image-level sufficiency-blind.
+  - The original 1d candidate (second VLM validation) is moved to a Phase 2 / 5 sanity step. Whether the text bias and the b=3 flip reproduce on another VLM is needed for paper generalization, but Phase 1c+1d already make the ScienceQA diagnostic solid enough.
 
-**Exit criterion for Phase 1**: 1a + 1b + 1c of the four done. 1d is optional. Four findings added to insights_ko.md → six findings.
+**Exit criterion for Phase 1**: 1a + 1b + 1c + 1d all complete. INSIGHTS now carries ⑤–⑯, twelve findings. Paper motivation candidates: ⑧, ⑪, ⑭, ⑮ as the headline figures.
 
 ### Phase 2 — Action-space expansion (no training, 1–1.5 weeks)
 
@@ -162,8 +161,9 @@ Not a separate phase, but things to keep rolling throughout to generate insights
 | I10 | Can SFT alone make the model follow the budget signal (without RL)? | Pareto compare | Phase 4a vs 4e |
 | I11 | Can choice stability (metric B) be used as a train-time abstention target? | SFT-label synthesis experiment | Phase 3a |
 | I12 | Does the "more info hurts" phenomenon (⑧, zi_correct b=1→b=6 −5pp) appear on other datasets? | b=1 vs b=6 comparison plot | Phase 1c-1d or Phase 2f |
-| I13 | Properly build the sufficiency-known mini-set skipped in Phase 1c (MM-UPD subset or 100 image-masked ScienceQA samples) → check whether vanilla abstention is calibrated on "unanswerable" samples | `preproc_masked/` + `run_abstention_masked.py` + comparison plot | Phase 1d (within a day) or early Phase 2 |
-| I14 | How does the anti-calibration (⑭) evolve across budgets b∈{1..10} — did it emerge sequentially? | abstain run per b → cohort-rate plot | Phase 1d (9 more runs, ~45 min) |
+| I13 | Properly build the sufficiency-known mini-set skipped in Phase 1c (MM-UPD subset or 100 image-masked ScienceQA samples) → check whether vanilla abstention is calibrated on "unanswerable" samples | `preproc_masked/` + `run_abstention_masked.py` + comparison plot | ✅ Phase 1d (2026-04-25). Δ ≤ 2pp → vanilla abstention is image-level sufficiency-blind. The decisive test moves to I15 because of the ScienceQA caveat. |
+| I14 | How does the anti-calibration (⑭) evolve across budgets b∈{1..10} — did it emerge sequentially? | abstain run per b → cohort-rate plot | ✅ Phase 1d (2026-04-25). The flip is exactly at b=3, anti-calibration persists, gap reaches −6.9pp at b=10. |
+| I15 | Decisive version of I13: V*Bench / HR-Bench (image-required-by-construction) + image-masked variants → directly test whether vanilla abstention tracks image-level sufficiency | masked V*Bench/HR-Bench 50–100 samples + abstain run + comparison | Early Phase 2 (after benchmark introduction) |
 
 ---
 
@@ -179,21 +179,19 @@ Not a separate phase, but things to keep rolling throughout to generate insights
 
 ## 7. Next unit of work (now-doing)
 
-Phase 1 fully closed — the remaining choice is along two axes:
+Phase 1 is fully closed. Next: **start Phase 2 — 6-action vocab expansion + introduction of V*Bench / HR-Bench**.
 
-**Option A (go deeper): Phase 1d — handle the scope-cut pieces + understand ⑭ more deeply**
-- I13: Build a sufficiency-known mini-set (100 image-masked ScienceQA samples or an MM-UPD subset) and check whether vanilla abstention is *actually* calibrated on truly unanswerable samples
-- I14: Sweep abstain runs over b=1..10 to see how anti-calibration (⑭) develops across budgets (~45 min)
-- Artifacts: 4–5 paper-appendix figures + an estimated 1–2 new findings
-- Time: half a day ~ one day
+Recommended order:
+1. **2f. Introduce one new benchmark** — V*Bench (high-res detail detection) OR HR-Bench 4K. Data download + preprocessing + 3-action vanilla baseline first.
+2. **2g. 6-action vanilla baseline (current vocab)** — budget sweep on the new benchmark. Confirm whether the b=3 dip in ④ / anti-calibration in ⑭ generalize off ScienceQA — addresses backlog I9 / I12 / I15 simultaneously.
+3. **2a–2d. Add actions**: ABSTAIN (already there) → ZOOM(bbox) (use Qwen2.5-VL native grounding) → REQUEST_HI_RES → THINK
+4. **2e. Cost-model refactor** — uniform-1 → token-based deterministic.
 
-**Option B (go wider): Start Phase 2 — 6-action vocab expansion**
-- 2a ABSTAIN (already have it) → 2b ZOOM(bbox) → 2c REQUEST_HI_RES → 2d THINK
-- First do 2f/2g: one new benchmark (V*Bench OR HR-Bench 4K), measure an inference-only baseline
-- Artifacts: 6-action interface + diagnostics on a new domain
-- Time: 1–1.5 weeks
+Total Phase 2 time: ~1–1.5 weeks. Core artifact: stable 6-action interface + sample-level predictions on V*Bench or HR-Bench. Phase 3 SFT-data synthesis can then use the new benchmark's correct trajectories.
 
-Recommendation: **Option A first**. Closing the scope-cut remnants of Phase 1c + capturing ⑭ fully as a budget×cohort 2D slice tightens the paper intro and adds information to the Phase 2 design. GPU requirement is small (one preprocessing pass + at most 9 abstain runs × 500 = a few hours).
+Open backlog handled in parallel during Phase 2:
+- **I9, I12, I15**: Whether ⑧ / ⑪ / ⑭ / ⑮ reproduce on the new benchmark → strengthens the paper's generalization evidence.
+- **I7**: Whether the same diagnostics reproduce on a second VLM (LLaVA-OneVision-7B or InternVL2.5-8B).
 
 ---
 
@@ -205,3 +203,4 @@ Recommendation: **Option A first**. Closing the scope-cut remnants of Phase 1c +
 | 2026-04-24 | Phase 1a complete. Added `analyze_calibration.py`; six-metric results land in `output/calibration/` + `output/plots/calibration/`. Added INSIGHTS ⑤–⑨. Next work switched to Phase 1b. I5 in the backlog marked ✅; I11 / I12 added. |
 | 2026-04-24 | Phase 1b complete. Added `analyze_difficulty.py`; cohort curves + modality mix + subject crosstab + delta-from-b1 produced. INSIGHTS ⑩–⑫ added (especially ⑪ cross-over at b=1, a paper-figure candidate). |
 | 2026-04-24 | Phase 1c complete (scope-cut noted). Added `enable_abstain` + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` to `budget_eval.py`. New: `run_abstention.py` + `analyze_abstention.py`. Ran `abstain_b0` + `abstain_b6` at 500 samples. INSIGHTS ⑬–⑭ added — ⑭ anti-calibration is direct evidence for the necessity of budget-conditional training. Sufficiency-known mini-set deferred to backlog I13. Five headline figures copied to `docs/figures/`. Committed Phase 1a+1b+1c as a bundle. |
+| 2026-04-25 | Phase 1d complete. New: `run_abstention_sweep.py` (8 additional abstain runs at b=1..5,7,8,10) + `preprocessing_masked.py` (100-sample image-masked variant under `preproc_masked/`) + `run_abstention_masked.py` (b=0/4/6 on the masked set) + `analyze_abstention_phase1d.py`. Findings: I13 (sufficiency-known masking, ⑯) and I14 (anti-calibration curve, ⑮). **⑮ The flip is exactly at b=3, the same location as ④'s macro dip** — strongest single-figure paper motivation candidate. ⑯ Δ ≤ 2pp under masking → vanilla abstention is image-blind. Two new headline plots copied to `docs/figures/abstention_phase1d_*.png`. New backlog I15 (the decisive sufficiency test moves to V*Bench / HR-Bench). |

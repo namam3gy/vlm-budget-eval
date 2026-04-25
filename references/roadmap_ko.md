@@ -2,19 +2,20 @@
 
 > 살아 있는 진행 추적 문서. **paper-scope 계획은 [`project_ko.md`](./project_ko.md)** (변경 금지에 가까운 reference), 이 문서는 그 계획 대비 현재 어디까지 왔는지 + 다음 단위 작업 + 인사이트 발굴 액션을 정리한다. 의미 있는 변화가 있을 때마다 업데이트.
 
-마지막 업데이트: 2026-04-24 (Phase 1a + 1b + 1c 완료)
+마지막 업데이트: 2026-04-25 (Phase 1a + 1b + 1c + 1d 완료)
 
 ---
 
 ## 0. 한 줄 요약
 
-`project_ko.md`의 Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) 완료. 6-action / SFT+GRPO / Pareto 학습은 아직 0%. 다음 단계는 **Phase 2 (action space 6개로 확장) → Phase 3 (SFT 데이터 파이프라인) → Phase 4 (GRPO 학습)**.
+`project_ko.md`의 Phase 0 (diagnostic baseline) + Phase 1a (calibration) + Phase 1b (difficulty stratification) + Phase 1c (abstention proxy) + Phase 1d (anti-calibration 곡선 + masking) **모두 완료**. 6-action / SFT+GRPO / Pareto 학습은 아직 0%. 다음 단계는 **Phase 2 (action space 6개로 확장 + V*Bench/HR-Bench 도입) → Phase 3 (SFT 데이터 파이프라인) → Phase 4 (GRPO 학습)**.
 
-Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). paper motivation으로 가장 강한 3가지:
+Phase 1에서 총 **12개 추가 인사이트 발굴** (INSIGHTS ⑤–⑯). paper motivation으로 가장 강한 4가지:
 
 - **⑧**: 모델은 zi_correct/zi_wrong 코호트에 거의 같은 양의 정보를 요청 (b=6에서 4.06 vs 4.33) — "내가 안다"를 인지 못 함.
 - **⑪**: budget-accuracy 곡선이 zi_correct와 zi_wrong에서 b=1에서 정확히 교차 — 쉬운 샘플은 정보가 망치고, 어려운 샘플은 정보가 살림. 매크로 plateau(0.700 ceiling)의 메커니즘.
-- **⑭**: b=6에서 vanilla abstention은 **anti-calibrated** (zi_correct 12.1% abstain > zi_wrong 7.3%). Abstention을 쓸 수 있지만 training 없이는 방향까지 거꾸로 간다는 직접 증거 → `research_plan` Thread D (R-Tuning / GRPO with abstention reward) 필요성 정당화.
+- **⑭**: b=6에서 vanilla abstention은 **anti-calibrated** (zi_correct 12.1% abstain > zi_wrong 7.3%) — training 없이는 방향까지 거꾸로 간다는 직접 증거.
+- **⑮**: Calibration → anti-calibration **flip이 정확히 b=3에서 일어남**, ④ macro dip과 같은 위치 → 두 phenomenon 한 메커니즘. paper의 budget-conditional + abstention reward를 **함께** 설계해야 한다는 가장 단단한 정량적 근거.
 
 ---
 
@@ -84,12 +85,10 @@ Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). pap
 - [x] **1b. Difficulty stratification** ✅ 2026-04-24 — `analyze_difficulty.py` + `output/difficulty/`. INSIGHTS ⑩–⑫ 추가. 핵심: ⑩ modality bias는 zi_wrong에서만 손해 (zi_correct는 always_text == always_visual 정확히 0.911), ⑪ budget-zi_correct 곡선과 zi_wrong 곡선이 b=1에서 정확히 교차 (clean cross-over), ⑫ natural science high-volatility / social science low-volatility — 도메인별 optimal budget 다름.
 - [x] **1c. Abstention proxy 측정** ✅ 2026-04-24 — `budget_eval.py`에 `enable_abstain` flag + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` 추가. `run_abstention.py`로 `abstain_b0` / `abstain_b6` 500샘플 각각 실행. `analyze_abstention.py`로 4개 metric(A summary, B cohort xtab, C Phi sweep, D cohort-aligned comparison) 산출. INSIGHTS ⑬–⑭ 추가. 핵심: ⑬ "답할지 말지" 신호가 zero_info 사전지식과 거의 겹침 (selectivity +3.3pp만), ⑭ b=6에서 vanilla abstention이 **anti-calibrated** (zi_correct 12.1% > zi_wrong 7.3% abstain).
   - ⚠️ **Scope-cut**: 원안의 MM-UPD subset / image-masked ScienceQA sufficiency-known mini-set은 **생략**. `zi_correct` / `zi_wrong` cohort를 sufficiency proxy로 사용. unanswerable-by-construction stimuli에 대한 직접 테스트는 Phase 1d 또는 Phase 2 초반으로 이월 — 아래 backlog I13 참조.
-- [ ] **1d. 두 번째 VLM 검증** (선택, 시간 남으면)
-  - 같은 3-action 프로토콜로 LLaVA-OneVision-7B 또는 InternVL2.5-8B 1종 돌리기
-  - 텍스트 편향이 model-specific인지 task-driven인지 분리
-  - 산출: `output/secondary_vlm/` + 비교표
+- [x] **1d. Anti-calibration 곡선 + sufficiency-known masking** ✅ 2026-04-25 — `run_abstention_sweep.py`로 b=1..5,7,8,10 추가 abstain 측정 (I14), `preproc_masked/` 100샘플(50/50 cohort) + `run_abstention_masked.py`로 image-masked 변형 b=0/4/6 측정 (I13), `analyze_abstention_phase1d.py`로 통합 분석. INSIGHTS ⑮–⑯ 추가. 핵심: ⑮ calibration→anti-calibration **flip이 정확히 b=3에서**, ④ macro dip과 같은 위치 → 두 현상이 한 메커니즘. ⑯ 이미지 마스킹해도 abstain rate Δ ≤ 2pp → vanilla abstention은 image-level sufficiency-blind.
+  - **두 번째 VLM 검증**(원래 1d 후보)은 Phase 2 / 5 sanity 단계로 이월. 텍스트 편향 + b=3 flip이 다른 VLM에서도 재현되는지는 paper 일반화 위해 필요하지만 Phase 1c+1d로 ScienceQA 진단은 충분히 단단해짐.
 
-**Exit criterion of Phase 1**: 위 4개 중 1a + 1b + 1c 완료. 1d는 옵션. insights_ko.md에 4가지 발견 추가 → 6가지로.
+**Exit criterion of Phase 1**: 1a + 1b + 1c + 1d 모두 완료. insights에 ⑤–⑯ 12개 발견 누적. paper motivation은 ⑧, ⑪, ⑭, ⑮가 핵심 figure 후보.
 
 ### Phase 2 — Action space 확장 (training 없이, 1-1.5주)
 
@@ -162,8 +161,9 @@ Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). pap
 | I10 | SFT만으로 budget signal을 따르게 만들 수 있는지 (RL 없이) | Pareto compare | Phase 4a vs 4e |
 | I11 | choice stability(metric B)를 train-time abstention target으로 쓸 수 있는가 | SFT label 합성 실험 | Phase 3a |
 | I12 | "추가 정보가 망친다" (⑧, zi_correct b=1→b=6 −5pp) 현상이 다른 데이터셋에서도 나타나는가 | b=1 vs b=6 비교 plot | Phase 1c-1d 또는 Phase 2f |
-| I13 | Phase 1c에서 skip한 sufficiency-known mini-set 제대로 만들기 (MM-UPD subset 또는 ScienceQA image-masked 100개) → vanilla abstention이 "답 불가능" 샘플에서는 calibrated인지 확인 | `preproc_masked/` + `run_abstention_masked.py` + 비교 plot | Phase 1d (1일 내) 또는 Phase 2 초반 |
-| I14 | Anti-calibration (⑭)이 다른 budget b∈{1..10}에서 어떻게 진화하는가 — 순차적으로 학습됐을 가능성 | b마다 abstain run → cohort rate plot | Phase 1d (추가 9 run, ~45분) |
+| I13 | Phase 1c에서 skip한 sufficiency-known mini-set 제대로 만들기 (MM-UPD subset 또는 ScienceQA image-masked 100개) → vanilla abstention이 "답 불가능" 샘플에서는 calibrated인지 확인 | `preproc_masked/` + `run_abstention_masked.py` + 비교 plot | ✅ Phase 1d (2026-04-25). Δ ≤ 2pp → vanilla abstention은 image-level sufficiency-blind. ScienceQA caveat 때문에 결정적 테스트는 I15로 이월. |
+| I14 | Anti-calibration (⑭)이 다른 budget b∈{1..10}에서 어떻게 진화하는가 — 순차적으로 학습됐을 가능성 | b마다 abstain run → cohort rate plot | ✅ Phase 1d (2026-04-25). flip이 정확히 b=3, 이후 영구 anti-calibrated, b=10에서 격차 −6.9pp. |
+| I15 | I13 결정판: V*Bench / HR-Bench (image-required-by-construction) + image-masked 변형으로 vanilla abstention의 image-level sufficiency 추적 능력 직접 테스트 | masked V*Bench/HR-Bench 50-100개 + abstain run + 비교 | Phase 2 초반 (벤치마크 도입 후) |
 
 ---
 
@@ -179,21 +179,19 @@ Phase 1에서 총 **10개 추가 인사이트 발굴** (INSIGHTS ⑤–⑭). pap
 
 ## 7. 다음 단위 작업 (now-doing)
 
-Phase 1 완전 종료 — 남은 선택지는 두 축이다:
+Phase 1 완전 종료. 다음은 **Phase 2 시작 — 6-action vocab 확장 + V*Bench/HR-Bench 도입**.
 
-**옵션 A (더 깊게): Phase 1d — scope-cut된 부분 처리 + ⑭ 이해 깊게**
-- I13: sufficiency-known mini-set (100개 image-masked ScienceQA 또는 MM-UPD subset) 만들고 vanilla abstention이 *정말* 답 불가능한 샘플에서는 calibrated인지 확인
-- I14: anti-calibration (⑭)이 budget별로 어떻게 생기는지 b=1..10 abstain sweep (~45분)
-- 산출: paper appendix 4-5 figure + 새 finding 1-2개 추정
-- 시간: 반나절 ~ 하루
+권장 순서:
+1. **2f. New benchmark 1종 도입** — V*Bench (high-res detail detection) OR HR-Bench 4K. 데이터 다운로드 + 전처리 + 3-action vanilla baseline 먼저.
+2. **2g. 6-action vanilla baseline (현 vocab)** — 새 벤치마크에서 budget sweep. 현재 ScienceQA의 ④ b=3 dip / ⑭ anti-calibration 이 일반화되는지 확인 — I9/I12/I15 backlog 동시 해결 가능.
+3. **2a–2d. Action 추가**: ABSTAIN (이미 있음) → ZOOM(bbox) (Qwen2.5-VL native grounding 활용) → REQUEST_HI_RES → THINK
+4. **2e. Cost model 리팩터** — uniform-1 → token-based deterministic.
 
-**옵션 B (더 넓게): Phase 2 시작 — 6-action vocab 확장**
-- 2a ABSTAIN (이미 있음) → 2b ZOOM(bbox) → 2c REQUEST_HI_RES → 2d THINK
-- 먼저 2f/2g: 새 벤치마크 1종 (V*Bench OR HR-Bench 4K) inference-only로 baseline 측정
-- 산출: 6-action 인터페이스 + 새 도메인에서 diagnostic
-- 시간: 1-1.5주
+전체 Phase 2 시간: 1–1.5주 추정. 핵심 산출: 6-action 인터페이스 안정화 + V*Bench 또는 HR-Bench에서 sample-level prediction. Phase 3 SFT 데이터 합성에 새 benchmark 정답 trajectory를 쓸 수 있게 됨.
 
-권장: **옵션 A 먼저**. Phase 1c의 scope-cut 남은 걸 마무리 + ⑭ 현상을 budget×cohort 2D로 완전히 캡처하면 paper intro가 더 단단해지고, Phase 2 design에 정보가 더해짐. GPU 소요는 작음 (1회 preprocessing + 최대 9 abstain run × 500 = 몇 시간).
+미해결 backlog (Phase 2 진행 중 동시 처리):
+- **I9, I12, I15**: 새 벤치마크에서 ⑧/⑪/⑭/⑮ 재현 여부 → paper 일반화 evidence 강화
+- **I7**: 두 번째 VLM (LLaVA-OneVision-7B 또는 InternVL2.5-8B)에서도 같은 진단 재현되는지
 
 ---
 
@@ -205,3 +203,4 @@ Phase 1 완전 종료 — 남은 선택지는 두 축이다:
 | 2026-04-24 | Phase 1a 완료. `analyze_calibration.py` 신규 추가, 6개 metric 결과 `output/calibration/` + `output/plots/calibration/`로 떨어짐. INSIGHTS에 ⑤–⑨ 다섯 발견 추가. 다음 작업 Phase 1b로 전환. Insight backlog I5에 ✅ 표시, I11/I12 추가. |
 | 2026-04-24 | Phase 1b 완료. `analyze_difficulty.py` 추가, cohort curve + modality mix + subject crosstab + delta-from-b1 산출. INSIGHTS ⑩–⑫ 추가 (특히 ⑪ cross-over at b=1은 paper figure 후보). |
 | 2026-04-24 | Phase 1c 완료 (scope-cut noted). `budget_eval.py`에 `enable_abstain` + `SYSTEM_INSTRUCTION_WITH_ABSTAIN` 추가. `run_abstention.py` + `analyze_abstention.py` 신규. `abstain_b0` + `abstain_b6` 500샘플 실행. INSIGHTS ⑬–⑭ 추가 — ⑭ anti-calibration 이 budget-conditional training 필요성의 직접 증거. sufficiency-known mini-set은 backlog I13으로 이월. 헤드라인 figure 5장 `docs/figures/`로 복사. Phase 1a+1b+1c 번들로 commit. |
+| 2026-04-25 | Phase 1d 완료. `run_abstention_sweep.py` (b=1..5,7,8,10 추가 abstain 8 run) + `preprocessing_masked.py` (100샘플 image-masked 변형) + `run_abstention_masked.py` (b=0/4/6 masked) + `analyze_abstention_phase1d.py` 신규. I13(sufficiency-known masking, ⑯) + I14(anti-calibration 곡선, ⑮) 발견. **⑮ flip이 정확히 b=3 = ④ macro dip 위치** — paper의 가장 단단한 single-figure motivation 후보. ⑯ 마스킹 Δ ≤ 2pp → vanilla abstention image-blind. 헤드라인 plot 2장 `docs/figures/abstention_phase1d_*.png` 추가. backlog I15 신규 (decisive sufficiency 테스트는 V*Bench/HR-Bench로 이월). |
